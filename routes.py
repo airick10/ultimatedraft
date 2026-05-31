@@ -45,16 +45,55 @@ def show_bk_logos():
     bk_set = get_team_names(32, "bk", human_teams)
     return render_template("partials/show_logos.html", names=bk_set, sport="basketball")
 
+
 @main.route("/bk_confirm", methods=["POST"])
 def bk_confirm():
+    #Getting the number of teams, the human teams, the pool, and the cap options
     num_teams = int(request.form.get("num_teams"))
-    human_teams  = request.form.getlist("human_teams")
-    pool  = request.form.get("pool")
-    cap  = request.form.get("cap")
+    human_teams = request.form.getlist("human_teams")
+    pool = request.form.get("pool")
+    cap = request.form.get("cap")
+
+    # Load the original full/custom/random pool
     people = load_basketball(pool, num_teams)
+
+    # IDs submitted from the checkbox form
+    selected_player_ids = request.form.getlist("selected_player_ids")
+
+    # For CUSTOM - If this is the second POST, filter people down to selected IDs
+    # Overwrites 'people'
+    if selected_player_ids:
+        selected_id_set = set(str(x) for x in selected_player_ids)
+
+        people = [
+            p for p in people
+            if str(p.get("ID")) in selected_id_set
+        ]
+
+    #Getting how many human teams are selected
     num_human_teams = len(human_teams)
-    ai_set = get_team_names(num_teams - num_human_teams, "bk", human_teams)
-    return render_template("bk_confirm.html", num_teams=num_teams, human_teams=human_teams, ai_set=ai_set, pool=pool, cap=cap, players=people)
+
+    # Preserve AI teams if they were already generated
+    ai_set = request.form.getlist("ai_set")
+
+    # If this is the first time loading the page, create AI teams
+    if not ai_set:
+        ai_set = get_team_names(
+            num_teams - num_human_teams,
+            "bk",
+            human_teams
+        )
+
+    return render_template(
+        "bk_confirm.html",
+        num_teams=num_teams,
+        human_teams=human_teams,
+        ai_set=ai_set,
+        pool=pool,
+        cap=cap,
+        players=people
+    )
+
 
 @main.route("/football")
 def start_football():
