@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Basketball Draft{% endblock %}
+{% block css %}
+  {{ super() }}
+
+  <style>
+    body {
+      background-color: #d4f0e1;
+      background-image: url("{{ url_for('static', filename='bk_back.jpg') }}");
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+    }
+
+    .table-borderless > tbody > tr > td,
+    .table-borderless > tbody > tr > th,
+    .table-borderless > tfoot > tr > td,
+    .table-borderless > tfoot > tr > th,
+    .table-borderless > thead > tr > td,
+    .table-borderless > thead > tr > th {
+      border: none;
+    }
+
+    a.link-dark {
+      text-decoration: none !important;
+    }
+
+    .link-dark:hover {
+      text-decoration: underline !important;
+    }
+
+    .commissioner-Regular {
+      font-family: "Commissioner", sans-serif;
+      font-optical-sizing: auto;
+      font-weight: 400;
+      font-style: normal;
+      font-variation-settings:
+        "slnt" 0,
+        "FLAR" 0,
+        "VOLM" 0;
+    }
+  </style>
+{% endblock %}
+
+
+{% block body %}
+{% for p in people %}
+
+<div id='all'>
+    <h1>All Players - <a class="link-offset-2 link-offset-3-hover link-underline link-underline-opacity-50 link-underline-opacity-75-hover link-dark" href="{{ url_for('main.index') }}">Home</a></h1>
+  <a href='#A'>A</a> - 
+  <a href='#B'>B</a> -
+  <a href='#C'>C</a> -
+  <a href='#D'>D</a> -
+  <a href='#E'>E</a> -
+  <a href='#F'>F</a> -
+  <a href='#G'>G</a> -
+  <a href='#H'>H</a> -
+  <a href='#I'>I</a> -
+  <a href='#J'>J</a> -
+  <a href='#K'>K</a> -
+  <a href='#L'>L</a> -
+  <a href='#M'>M</a> -
+  <a href='#N'>N</a> -
+  <a href='#O'>O</a> -
+  <a href='#P'>P</a> -
+  <a href='#Q'>Q</a> -
+  <a href='#R'>R</a> -
+  <a href='#S'>S</a> -
+  <a href='#T'>T</a> -
+  <a href='#U'>U</a> -
+  <a href='#V'>V</a> -
+  <a href='#W'>W</a> -
+  <a href='#Y'>Y</a> -
+  <a href='#Z'>Z</a>
+</div>
+<div class="container-fluid">
+    <div class="row align-items-start">
+        <div class='col-6'>
+  <table class="table table-borderless">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <!--<th>Button</th>-->
+      </tr>
+    </thead>
+    <tbody>
+  {% for p in people %}
+    {% set first_letter = (p.get('LastName','')[:1] | upper) %}
+    {% set prev_letter  = (loop.previtem.get('LastName','')[:1] | upper) if loop.previtem else '' %}
+
+    {% if not loop.previtem or first_letter != prev_letter %}
+      <tr class="table-primary" id="{{ first_letter }}">
+        <td colspan="7"><b>{{ first_letter }}</b> - <a href='#all'>Top</a></td>
+      </tr>
+    {% endif %}
+
+    <!--{% set team_logo = p.get('s_mlbteam', [])[0] if p.get('s_mlbteam') else '' %}-->
+    <tr>
+      <td class='commissioner-Regular fs-4 '>{{ p.Pos }} - <a class="link-offset-2 link-offset-3-hover link-underline link-underline-opacity-50 link-underline-opacity-75-hover link-dark" href="{{ url_for('main.index') }}">{{ p.get('FirstName','') }} {{ p.get('LastName','') }}</a> <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/hats/test.png" height=25px></td>
+
+    </tr>
+  {% endfor %}
+</tbody>
+
+
+  </table>
+</div>
+<div class='col-6'>
+    TEST
+</div>
+</div>
+</div>
+{% endfor %}
+{% endblock %}
+
+
+

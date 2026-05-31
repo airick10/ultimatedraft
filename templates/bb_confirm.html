@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Baseball Draft{% endblock %}
+{% block css %}
+  {{ super() }}
+
+  <style>
+    body {
+      background-color: #d4f0e1;
+      background-image: url("{{ url_for('static', filename='bk_back.jpg') }}");
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+    }
+
+    .table-borderless > tbody > tr > td,
+    .table-borderless > tbody > tr > th,
+    .table-borderless > tfoot > tr > td,
+    .table-borderless > tfoot > tr > th,
+    .table-borderless > thead > tr > td,
+    .table-borderless > thead > tr > th {
+      border: none;
+    }
+
+    a.link-dark {
+      text-decoration: none !important;
+    }
+
+    .link-dark:hover {
+      text-decoration: underline !important;
+    }
+
+    a.link-light {
+      text-decoration: none !important;
+    }
+
+    .link-light:hover {
+      text-decoration: underline !important;
+    }
+
+    .commissioner-Regular {
+      font-family: "Commissioner", sans-serif;
+      font-optical-sizing: auto;
+      font-weight: 400;
+      font-style: normal;
+      font-variation-settings:
+        "slnt" 0,
+        "FLAR" 0,
+        "VOLM" 0;
+    }
+
+    .logo-checkbox { display: none; }
+    .logo-label {
+      cursor: pointer;
+      display: inline-block;
+      border: 3px solid transparent;
+      border-radius: 8px;
+      padding: 4px;
+      transition: border-color 0.15s ease;
+    }
+    .logo-checkbox:checked + .logo-label {
+      border-color: #00aaff;
+      background-color: rgba(0, 170, 255, 0.15);
+    }
+  </style>
+{% endblock %}
+
+
+{% block body %}
+
+  <h1><a class="link-offset-2 link-offset-3-hover link-underline link-underline-opacity-50 link-underline-opacity-75-hover link-light" href="{{ url_for('main.start_baseball') }}">Go Back</a></h1>
+
+  <h1 class='text-light'>Number of Teams: {{ num_teams }}</h1>
+  <h2 class='text-light'>Human Teams:</h2>
+  {% for name in human_teams %}
+    <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/baseball/{{ name }}_bb.png" height="100">
+  {% endfor %}
+  <h2 class='text-light'>AI Teams:</h2>
+  {% for name in ai_set %}
+    <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/baseball/{{ name }}_bb.png" height="100">
+  {% endfor %}
+  <h2 class='text-light'>Pool: {{ pool }}</h2>
+  <h2 class='text-light'>Cap: {{ cap }}</h2>
+
+ 
+{% endblock %}
+
+
+

@@ -1,0 +1,172 @@
+body {
+	background-color: #d6f6fd;
+}
+
+/* PLAYER PAGE */
+
+.playerheader {
+	height: 100px;
+	border-bottom: 1px solid #000000;
+}
+
+.ANA_color {
+	background-color: #BA0021;
+	color: #FFFFFF;
+}
+
+.ARI_color {
+	background-color: #E3D4AD;
+	color: #000000;
+}
+
+.ATL_color {
+	background-color: #13274F;
+	color: #FFFFFF;
+}
+
+.BAL_color {
+	background-color: #DF4601;
+	color: #FFFFFF;
+}
+
+.BOS_color {
+	background-color: #BD3039;
+	color: #FFFFFF;
+}
+
+.CHC_color {
+	background-color: #0E3386;
+	color: #FFFFFF;
+}
+
+.CWS_color {
+	background-color: #27251F;
+	color: #FFFFFF;
+}
+
+.CIN_color {
+	background-color: #C6011F;
+	color: #FFFFFF;
+}
+
+.CLE_color {
+	background-color: #00385D;
+	color: #FFFFFF;
+}
+
+.COL_color {
+	background-color: #333366;
+	color: #FFFFFF;
+}
+
+.DET_color {
+	background-color: #0C2340;
+	color: #FFFFFF;
+}
+
+.HOU_color {
+	background-color: #F4911E;
+	color: #FFFFFF;
+}
+
+.KC_color {
+	background-color: #004687;
+	color: #FFFFFF;
+}
+
+.LA_color {
+	background-color: #005A9C;
+	color: #FFFFFF;
+}
+
+.FLA_color {
+	background-color: #00A3E0;
+	color: #FFFFFF;
+}
+
+.MIL_color {
+	background-color: #B6922E;
+	color: #FFFFFF;
+}
+
+.MIN_color {
+	background-color: #002B5C;
+	color: #FFFFFF;
+}
+
+.MON_color {
+	background-color: #003087;
+	color: #FFFFFF;
+}
+
+.NEG_color {
+	background-color: #27251F;
+	color: #FFFFFF;
+}
+
+
+.NYM_color {
+	background-color: #FF5910;
+	color: #FFFFFF;
+}
+
+.NYY_color {
+	background-color: #0C2340;
+	color: #FFFFFF;
+}
+
+.OAK_color {
+	background-color: #003831;
+	color: #FFFFFF;
+}
+
+.PHI_color {
+	background-color: #E81828;
+	color: #FFFFFF;
+}
+
+.PIT_color {
+	background-color: #FDB827;
+	color: #000000;
+}
+
+.STL_color {
+	background-color: #C41E3A;
+	color: #FFFFFF;
+}
+
+.SD_color {
+	background-color: #2F241D;
+	color: #FFFFFF;
+}
+
+.SF_color {
+	background-color: #FD5A1E;
+	color: #000000;
+}
+
+.SEA_color {
+	background-color: #005C5C;
+	color: #FFFFFF;
+}
+
+.TB_color {
+	background-color: #8FBCE6;
+	color: #000000;
+}
+
+.TEX_color {
+	background-color: #C0111F;
+	color: #FFFFFF;
+}
+
+.TOR_color {
+	background-color: #134A8E;
+	color: #FFFFFF;
+}
+
+.WSH_color {
+	background-color: #AB0003;
+	color: #FFFFFF;
+}
+

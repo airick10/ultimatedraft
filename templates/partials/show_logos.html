@@ -1,0 +1,22 @@
+<h1 class='text-light'>Pick the human team(s)</h1>
+  <p>
+{% for name in names[:32] %}
+  {% if loop.index0 % 8 == 0 %}
+    {% if loop.index0 != 0 %}</div>{% endif %}
+    <div class="row align-items-center mb-3">
+  {% endif %}
+  <div class="col-auto">
+    <input type="checkbox" class="logo-checkbox" id="team_{{ name }}" name="human_teams" value="{{ name }}">
+    <label class="logo-label" for="team_{{ name }}">
+      {% if sport == "basketball" %} 
+      <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/basketball/{{ name }}_bk.png" height="100">
+      {% elif sport == "baseball" %}
+      <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/baseball/{{ name }}_bb.png" height="100">
+      {% else %}
+      <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/football/{{ name }}_fb.png" height="100">
+      {% endif %}
+
+    </label>
+  </div>
+{% endfor %}
+</div> 

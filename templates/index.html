@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Sports Draft{% endblock %}
+
+
+{% block body %}
+<h1>
+<a class="link-offset-2 link-offset-3-hover link-underline link-underline-opacity-50 link-underline-opacity-75-hover link-dark" href="{{ url_for('main.start_baseball') }}"><img src="{{ url_for('static', filename='baseball.jpg') }}" height=300 border=none>
+</a>
+</h1>
+<p>
+  <h1>
+<a class="link-offset-2 link-offset-3-hover link-underline link-underline-opacity-50 link-underline-opacity-75-hover link-dark" href="{{ url_for('main.start_basketball') }}"><img src="{{ url_for('static', filename='basketball.jpg') }}" height=300 border=none>
+</a>
+</h1>
+<p>
+  <h1>
+<a class="link-offset-2 link-offset-3-hover link-underline link-underline-opacity-50 link-underline-opacity-75-hover link-dark" href="{{ url_for('main.start_football') }}"><img src="{{ url_for('static', filename='football.jpg') }}" height=300 border=none>
+</a>
+</h1>
+<p>
+<hr>
+{% endblock %}
+
+
+

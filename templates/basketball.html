@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Basketball Draft{% endblock %}
+{% block scripts %}
+  {{ super() }}
+  <script>
+    document.addEventListener("change", function(e) {
+      if (e.target.name === "human_teams") {
+        const anyChecked = document.querySelectorAll('input[name="human_teams"]:checked').length > 0;
+        document.getElementById("draft-options").style.display = anyChecked ? "block" : "none";
+      }
+    });
+  </script>
+{% endblock %}
+{% block css %}
+  {{ super() }}
+
+  <style>
+    body {
+      background-color: #d4f0e1;
+      background-image: url("{{ url_for('static', filename='bk_back.jpg') }}");
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+    }
+
+    .table-borderless > tbody > tr > td,
+    .table-borderless > tbody > tr > th,
+    .table-borderless > tfoot > tr > td,
+    .table-borderless > tfoot > tr > th,
+    .table-borderless > thead > tr > td,
+    .table-borderless > thead > tr > th {
+      border: none;
+    }
+
+    a.link-dark {
+      text-decoration: none !important;
+    }
+
+    .link-dark:hover {
+      text-decoration: underline !important;
+    }
+
+    a.link-light {
+      text-decoration: none !important;
+    }
+
+    .link-light:hover {
+      text-decoration: underline !important;
+    }
+
+    .commissioner-Regular {
+      font-family: "Commissioner", sans-serif;
+      font-optical-sizing: auto;
+      font-weight: 400;
+      font-style: normal;
+      font-variation-settings:
+        "slnt" 0,
+        "FLAR" 0,
+        "VOLM" 0;
+    }
+
+    .logo-checkbox { display: none; }
+    .logo-label {
+      cursor: pointer;
+      display: inline-block;
+      border: 3px solid transparent;
+      border-radius: 8px;
+      padding: 4px;
+      transition: border-color 0.15s ease;
+    }
+    .logo-checkbox:checked + .logo-label {
+      border-color: #00aaff;
+      background-color: rgba(0, 170, 255, 0.15);
+    }
+  </style>
+{% endblock %}
+
+
+{% block body %}
+
+  <h1><a class="link-offset-2 link-offset-3-hover link-underline link-underline-opacity-50 link-underline-opacity-75-hover link-light" href="{{ url_for('main.index') }}">Home</a></h1>
+
+  <h1 class='text-light'>Load Saved Draft</h1>
+
+  <p>
+  <form action="/bk_confirm" method=POST>
+  <h1 class='text-light'>How many teams?</h1>
+  <br>
+  <select name='num_teams' id="num_teams" hx-get="/show_bk_logos" hx-target="#show_bk_logos" hx-trigger="change">
+    <option value='4' selected="selected">4</option>
+    <option value='8'>8</option>
+    <option value='12'>12</option>
+    <option value='16'>16</option>
+    <option value='24'>24</option>
+    <option value='32'>32</option>
+  </select>
+  <p>
+  <!-- Show grid of buttons for teams.  Clicking a button (selects it) with a border showing.  Like a checkbox -->
+  <br>
+  <div class="container" id='show_bk_logos'>
+
+  </div>
+  <hr>
+  <p>
+    <div id="draft-options" style="display:none;">
+      <h1 class='text-light'>Draft Pool Size?</h1>
+      <br>
+      <select name='pool' id='pool'>
+        <option value='full'>Complete</option>
+        <option value='random'>Random</option>
+        <option value='custom'>Custom</option>
+      </select>
+      <p>
+      <h1 class='text-light'>Salary Cap?</h1>
+      <br>
+      <input type="radio" id="yes" name="cap" value="Yes"><label for="yes">Yes</label>
+      <input type="radio" id="no" name="cap" value="No"><label for="yes">No</label>
+      <p>
+          <input type='submit' value='Submit'>
+  </div>
+
+  </form>
+
+ 
+{% endblock %}
+
+
+
