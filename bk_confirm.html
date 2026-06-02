@@ -87,6 +87,15 @@ function validateSelections() {
     document.getElementById('g-count').textContent = `${gCount} / ${required.G}`;
 }
 
+function setPositionCheckboxes(positionClass, checked) {
+    const boxes = document.querySelectorAll(`input.${positionClass}`);
+    boxes.forEach(box => {
+        box.checked = checked;
+    });
+
+    validateSelections();
+}
+
 document.addEventListener('DOMContentLoaded', validateSelections);
 </script>
 {% endblock %}
@@ -176,34 +185,103 @@ document.addEventListener('DOMContentLoaded', validateSelections);
 
     <div class="row">
       <div class="col">
-    <h3>Centers <span id="c-count" class="text-warning">0 / {{ num_teams * 2 }}</span></h3>
-    {% for p in players %}
-        {% if p.get('Pos','') == "C" %}
-        <input type="checkbox" class="pos-C" id="{{ p.get('id','') }}" name="selected_player_ids" value="{{ p.get('id','') }}" onchange="validateSelections()">
-        <label for="{{ p.get('id','') }}">{{ p.get('FirstName','') }} {{ p.get('LastName','') }}</label><br>
-        {% endif %}
-    {% endfor %}
-</div>
+        <h3>
+            Centers 
+            <span id="c-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
+        </h3>
+
+        <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-C', true)">
+            Check All Centers
+        </button>
+
+        <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-C', false)">
+            Reset Centers
+        </button>
+
+        <br><br>
+
+        {% for p in players %}
+            {% if p.get('Pos','') == "C" %}
+                <input 
+                    type="checkbox" 
+                    class="pos-C" 
+                    id="player-{{ p.get('ID','') }}" 
+                    name="selected_player_ids" 
+                    value="{{ p.get('ID','') }}" 
+                    onchange="validateSelections()"
+                >
+                <label for="player-{{ p.get('ID','') }}">
+                    {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                </label><br>
+            {% endif %}
+        {% endfor %}
+    </div>
 
       <div class="col">
-    <h3>Forwards <span id="f-count" class="text-warning">0 / {{ num_teams * 4 }}</span></h3>
-    {% for p in players %}
-        {% if p.get('Pos','') == "F" %}
-        <input type="checkbox" class="pos-F" id="{{ p.get('id','') }}" name="selected_player_ids" value="{{ p.get('id','') }}" onchange="validateSelections()">
-        <label for="{{ p.get('id','') }}">{{ p.get('FirstName','') }} {{ p.get('LastName','') }}</label><br>
-        {% endif %}
-    {% endfor %}
-</div>
+          <h3>
+              Forwards 
+              <span id="f-count" class="text-warning">0 / {{ num_teams * 4 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-F', true)">
+              Check All Forwards
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-F', false)">
+              Reset Forwards
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('Pos','') == "F" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-F" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
 
       <div class="col">
-    <h3>Guards <span id="g-count" class="text-warning">0 / {{ num_teams * 4 }}</span></h3>
-    {% for p in players %}
-        {% if p.get('Pos','') == "G" %}
-        <input type="checkbox" class="pos-G" id="{{ p.get('id','') }}" name="selected_player_ids" value="{{ p.get('id','') }}" onchange="validateSelections()">
-        <label for="{{ p.get('id','') }}">{{ p.get('FirstName','') }} {{ p.get('LastName','') }}</label><br>
-        {% endif %}
-    {% endfor %}
-</div>
+          <h3>
+              Guards 
+              <span id="g-count" class="text-warning">0 / {{ num_teams * 4 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-G', true)">
+              Check All Guards
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-G', false)">
+              Reset Guards
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('Pos','') == "G" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-G" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
 
 
     </div>
