@@ -1,6 +1,7 @@
 from flask import Flask
 import json
 import random
+from datetime import datetime
 from pathlib import Path
 from functools import lru_cache
 from operator import itemgetter
@@ -134,6 +135,169 @@ def load_basketball(pool, num_teams):
 
     people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
     return people
+
+
+from datetime import datetime
+from pathlib import Path
+import json
+
+
+def initial_save_basketball_json(players, draftname, timestamp):
+    people = []
+
+    for p in players:
+        people.append({
+            **p,
+            "team_id": 0,
+            "id": p.get("id") or p.get("ID")
+        })
+
+    people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
+
+    filename = f"{draftname}_bk_{timestamp}.json"
+
+    output_dir = Path("drafts")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = output_dir / filename
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(people, f, indent=2)
+
+    return output_path
+
+
+def initial_save_basketball_meta_json(
+    draftname,
+    num_teams,
+    human_teams,
+    ai_set,
+    pool,
+    cap,
+    player_file,
+    timestamp
+):
+    filename = f"{draftname}_bk_meta_{timestamp}.json"
+
+    output_dir = Path("drafts")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = output_dir / filename
+
+    teams = []
+    team_id = 1
+
+    for team in human_teams:
+        teams.append({
+            "team_id": team_id,
+            "team_name": team,
+            "type": "human"
+        })
+        team_id += 1
+
+    for team in ai_set:
+        teams.append({
+            "team_id": team_id,
+            "team_name": team,
+            "type": "ai"
+        })
+        team_id += 1
+
+    meta = {
+        "draftname": draftname,
+        "sport": "bk",
+        "num_teams": num_teams,
+        "human_teams": len(human_teams),
+        "ai_teams": len(ai_set),
+        "pool": pool,
+        "cap": cap,
+        "player_file": str(player_file),
+        "teams": teams
+    }
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+
+    return output_path
+
+
+def initial_save_basketball_log_json(draftname, timestamp):
+    filename = f"{draftname}_bk_log_{timestamp}.json"
+
+    output_dir = Path("drafts")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = output_dir / filename
+
+    log = []
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(log, f, indent=2)
+
+    return output_path
+
+
+def get_saved_basketball_drafts():
+    draft_dir = Path("drafts")
+    saved_drafts = []
+
+    if not draft_dir.exists():
+        return saved_drafts
+
+    for file_path in sorted(draft_dir.glob("*_bk_*.json")):
+        name = file_path.name
+
+        if "_meta_" in name or "_log_" in name:
+            continue
+
+        saved_drafts.append(name)
+
+    saved_drafts.sort(reverse=True)
+    return saved_drafts
+
+
+def load_saved_basketball_draft(filename):
+    draft_dir = Path("drafts")
+    player_path = draft_dir / filename
+
+    if not player_path.exists():
+        raise FileNotFoundError(f"Draft file not found: {filename}")
+
+    stem = player_path.stem
+
+    if "_bk_" not in stem:
+        raise ValueError(f"Not a basketball draft file: {filename}")
+
+    draftname, timestamp = stem.split("_bk_", 1)
+
+    meta_path = draft_dir / f"{draftname}_bk_meta_{timestamp}.json"
+    log_path = draft_dir / f"{draftname}_bk_log_{timestamp}.json"
+
+    with open(player_path, "r", encoding="utf-8") as f:
+        players = json.load(f)
+
+    meta = {}
+    if meta_path.exists():
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+
+    log = []
+    if log_path.exists():
+        with open(log_path, "r", encoding="utf-8") as f:
+            log = json.load(f)
+
+    return {
+        "players": players,
+        "meta": meta,
+        "log": log,
+        "player_path": player_path,
+        "meta_path": meta_path,
+        "log_path": log_path,
+        "draftname": draftname,
+        "timestamp": timestamp,
+    }
+
+
 
 def load_football():
     players = load_football_json()
