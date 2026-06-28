@@ -108,69 +108,6 @@ def bk_load():
         log_file=str(draft_data.get("log_path", "")),
     )
 
-'''
-@main.route("/bk_confirm", methods=["POST"])
-def bk_confirm():
-    #Getting the number of teams, the human teams, the pool, and the cap options
-    num_teams = int(request.form.get("num_teams"))
-    human_teams = request.form.getlist("human_teams")
-    pool = request.form.get("pool")
-    cap = request.form.get("cap")
-    draftname = request.form.get("draftname")
-
-    # Load the original full/custom/random pool
-    people = load_basketball(pool, num_teams)
-
-    # IDs submitted from the checkbox form
-    selected_player_ids = request.form.getlist("selected_player_ids")
-
-    # For CUSTOM - If this is the second POST, filter people down to selected IDs
-    # Overwrites 'people'
-    if selected_player_ids:
-        selected_id_set = set(str(x) for x in selected_player_ids)
-
-        people = [
-            p for p in people
-            if str(p.get("ID")) in selected_id_set
-        ]
-
-    #Getting how many human teams are selected
-    num_human_teams = len(human_teams)
-
-    # Preserve AI teams if they were already generated
-    ai_set = request.form.getlist("ai_set")
-
-    # If this is the first time loading the page, create AI teams
-    if not ai_set:
-        ai_set = get_team_names(
-            num_teams - num_human_teams,
-            "bk",
-            human_teams
-        )
-
-    return render_template(
-        "bk_confirm.html",
-        num_teams=num_teams,
-        human_teams=human_teams,
-        ai_set=ai_set,
-        pool=pool,
-        draftname=draftname,
-        cap=cap,
-        players=people
-    )
-
-@main.route("/bk_draft", methods=["POST"])
-def bk_draft():
-    num_teams = int(request.form.get("num_teams"))
-    human_teams = request.form.getlist("human_teams")
-    pool = request.form.get("pool")
-    cap = request.form.get("cap")
-    draftname = request.form.get("draftname")
-
-    initial_save_basketball_json(pool, draftname)
-    return render_template("bkdraft.html") 
-'''
-
 @main.route("/bk_confirm", methods=["POST"])
 def bk_confirm():
     num_teams = int(request.form.get("num_teams"))
@@ -234,7 +171,7 @@ def bk_confirm():
         mode=mode
     )
 
-
+'''
 @main.route("/bk_draft", methods=["POST"])
 def bk_draft():
     num_teams = int(request.form.get("num_teams"))
@@ -283,7 +220,56 @@ def bk_draft():
         players=people,
         draft_file=output_path
     )   
+'''
 
+
+@main.route("/bk_draft", methods=["POST"])
+def bk_draft():
+    num_teams     = int(request.form.get("num_teams"))
+    human_teams   = request.form.getlist("human_teams")
+    ai_set        = request.form.getlist("ai_set")
+    pool          = request.form.get("pool")
+    cap           = request.form.get("cap")
+    draftname     = request.form.get("draftname")
+    selected_ids  = request.form.getlist("selected_player_ids")
+
+    all_players = load_basketball("full", num_teams)
+
+    if pool == "full":
+        people = all_players
+    else:
+        id_set = set(str(x) for x in selected_ids)
+        people = [p for p in all_players if str(p.get("id")) in id_set]
+
+    # Build a unified team list: human teams first, then AI
+    # Each entry is a dict with name + is_human flag
+    all_teams = [{"name": t, "is_human": True}  for t in human_teams] + \
+                [{"name": t, "is_human": False} for t in ai_set]
+
+    # Chunk teams into rows of 8 for the logo strip
+    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
+
+    # Roster slot labels for basketball (2 of each position)
+    roster_slots = ["C", "C", "PF", "PF", "SF", "SF", "SG", "SG", "PG", "PG"]
+
+    timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = initial_save_basketball_json(people, draftname, timestamp)
+    meta_path   = initial_save_basketball_meta_json(
+                      draftname, num_teams, human_teams,
+                      ai_set, pool, cap, output_path, timestamp)
+    log_path    = initial_save_basketball_log_json(draftname, timestamp)
+
+    return render_template(
+        "bkdraft.html",
+        all_teams=all_teams,
+        logo_rows=logo_rows,
+        roster_slots=roster_slots,
+        pool=pool,
+        cap=cap,
+        draftname=draftname,
+        players=people,
+        draft_file=output_path
+    )
 
 @main.route("/football")
 def start_football():
