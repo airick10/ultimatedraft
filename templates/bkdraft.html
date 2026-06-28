@@ -1,0 +1,381 @@
+{% extends "base.html" %}
+{% block title %}Basketball Draft{% endblock %}
+{% block css %}
+  {{ super() }}
+<style>
+  /* ── Base ── */
+  body {
+    background: #0d0d0d;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', sans-serif;
+    position: relative;
+    isolation: isolate;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: url("{{ url_for('static', filename='hardwood.jpg') }}") center center / cover no-repeat;
+    opacity: 0.15;
+    z-index: -1;
+}
+.nav-strip {
+    background: #0a0a0a;
+    border-bottom: 1px solid #2a2a2a;
+    padding: 0px 12px;
+}
+.nav-strip a {
+    color: #666;
+    font-size: .72rem;
+    text-decoration: none;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+}
+.nav-strip a:hover { color: #c9a84c; }
+
+  /* ── Logo Strip ── */
+  .logo-strip {
+    background:#111;
+    border-bottom:2px solid #c9a84c;
+    padding:8px 12px;
+    display:flex;
+    flex-wrap:nowrap;
+    gap:8px;
+    justify-content:flex-start;
+  }
+  .logo-strip + .logo-strip { border-top:1px solid #222; }
+  .logo-wrap {
+    flex:0 0 calc(12.5% - 8px); /* 8 per row */
+    text-align:center;
+  }
+  .logo-wrap img {
+    height:48px;
+    width:auto;
+    object-fit:contain;
+    filter:drop-shadow(0 0 4px rgba(201,168,76,0.4));
+    transition:filter .2s;
+  }
+  .logo-wrap img:hover { filter:drop-shadow(0 0 8px #c9a84c); }
+  .logo-wrap .team-label {
+    font-size:.6rem;
+    color:#888;
+    margin-top:2px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .logo-wrap.active img  { filter:drop-shadow(0 0 10px #39ff14); }
+  .logo-wrap.active .team-label { color:#39ff14; }
+
+  /* ── Main 3-pane row ── */
+  .draft-body { display:flex; height:calc(100vh - 120px); overflow:hidden; }
+
+  /* ── Left pane — all team rosters ── */
+  .pane-left {
+    width:200px;
+    min-width:160px;
+    background:#111;
+    border-right:1px solid #2a2a2a;
+    overflow-y:auto;
+    padding:10px 8px;
+  }
+  .pane-left h6 {
+    color:#c9a84c;
+    font-size:.7rem;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    margin-bottom:8px;
+    border-bottom:1px solid #2a2a2a;
+    padding-bottom:4px;
+  }
+  .roster-team { margin-bottom:12px; }
+  .roster-team .t-name {
+    font-size:.72rem;
+    font-weight:600;
+    color:#e0e0e0;
+    margin-bottom:3px;
+  }
+  .roster-team .t-pick {
+    font-size:.68rem;
+    color:#666;
+    padding:1px 0;
+  }
+  .roster-team .t-pick.filled { color:#c9a84c; }
+
+  /* ── Center pane — player pool ── */
+  .pane-center {
+    flex:1;
+    overflow-y:auto;
+    padding-left:12px;
+    background:#0d0d0d;
+  }
+  .pane-center .draft-title {
+    font-size:1rem;
+    font-weight:700;
+    color:#c9a84c;
+    text-transform:uppercase;
+    letter-spacing:.1em;
+    margin-bottom:10px;
+  }
+  .pane-center-header {
+    position: sticky;
+    top: 0;
+    background: #0d0d0d;
+    z-index: 2;
+    padding-bottom: 8px;
+}
+  .pos-filter {
+    display:flex;
+    gap:6px;
+    margin-bottom:10px;
+    flex-wrap:wrap;
+  }
+  .pos-filter .btn-pos {
+    background:#1a1a1a;
+    border:1px solid #333;
+    color:#aaa;
+    font-size:.72rem;
+    padding:3px 10px;
+    border-radius:3px;
+    cursor:pointer;
+    transition:all .15s;
+  }
+  .pos-filter .btn-pos:hover,
+  .pos-filter .btn-pos.active {
+    background:#c9a84c;
+    border-color:#c9a84c;
+    color:#000;
+    font-weight:600;
+  }
+
+  /* Player table */
+  .player-table { width:100%; border-collapse:separate; border-spacing: 0; font-size:.8rem; }
+  .player-table thead {
+    position: sticky;
+    top: 72px;
+    z-index: 1;
+}
+  .player-table thead tr {
+    background:#1a1a1a;
+    border-bottom:2px solid #c9a84c;
+    z-index: 1;
+  }
+  .player-table th {
+    color:#c9a84c;
+    font-size:.7rem;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    padding:7px 10px;
+    text-align:left;
+    font-weight:600;
+    cursor: pointer;
+  }
+
+  .sort-icon { font-size: .6rem; color: #666; margin-left: 3px; }
+  .player-table tbody tr {
+    border-bottom:1px solid #1e1e1e;
+    transition:background .12s;
+  }
+  .player-table tbody tr:hover { background:#1a1a1a; cursor:pointer; }
+  .player-table td { padding:6px 10px; color:#ccc; }
+  .player-table td.pos-badge {
+    font-weight:700;
+    font-size:.7rem;
+    color:#39ff14;
+  }
+  .player-table tbody tr.drafted { opacity:.35; pointer-events:none; }
+
+  /* ── Right pane — current team's roster ── */
+  .pane-right {
+    width:190px;
+    min-width:160px;
+    background:#111;
+    border-left:1px solid #2a2a2a;
+    padding:10px 8px;
+    overflow-y:auto;
+  }
+  .pane-right h6 {
+    color:#39ff14;
+    font-size:.7rem;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    margin-bottom:4px;
+    border-bottom:1px solid #2a2a2a;
+    padding-bottom:4px;
+  }
+  .pane-right .on-clock {
+    font-size:.8rem;
+    font-weight:700;
+    color:#e0e0e0;
+    margin-bottom:10px;
+  }
+  .slot-row {
+    display:flex;
+    align-items:center;
+    gap:6px;
+    padding:4px 0;
+    border-bottom:1px solid #1c1c1c;
+    font-size:.75rem;
+  }
+  .slot-label {
+    width:28px;
+    font-weight:700;
+    color:#c9a84c;
+    font-size:.68rem;
+    flex-shrink:0;
+  }
+  .slot-player { color:#888; font-style:italic; }
+  .slot-player.filled { color:#e0e0e0; font-style:normal; }
+</style>
+
+<script>
+  let sortDir = {};
+
+function sortTable(col) {
+    const tbody = document.getElementById('playerBody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    sortDir[col] = !sortDir[col];  // toggle asc/desc
+
+    rows.sort((a, b) => {
+        let aVal = a.cells[col].innerText.trim();
+        let bVal = b.cells[col].innerText.trim();
+        if (col === 1) {
+            const aLast = aVal.split(' ').pop();
+            const bLast = bVal.split(' ').pop();
+            return sortDir[col]
+                ? aLast.localeCompare(bLast)
+                : bLast.localeCompare(aLast);
+        }
+        // numeric sort for PPG/RPG/APG cols
+        if (col >= 3) {
+            aVal = parseFloat(aVal) || 0;
+            bVal = parseFloat(bVal) || 0;
+            return sortDir[col] ? aVal - bVal : bVal - aVal;
+        }
+        return sortDir[col]
+            ? aVal.localeCompare(bVal)
+            : bVal.localeCompare(aVal);
+    });
+
+    rows.forEach(r => tbody.appendChild(r));
+
+    // update icons
+    document.querySelectorAll('.sort-icon').forEach((el, i) => {
+        el.textContent = i === col ? (sortDir[col] ? '↑' : '↓') : '↕';
+    });
+}
+</script>
+
+{% endblock %}
+{% block body %}
+<!-- Background, Bootstrap seems to fight this.  So doing an inline -->
+<div style="position:fixed;inset:0;background:url('{{ url_for('static', filename='hardwood.jpg') }}') center/cover;opacity:0.3;z-index:9999;pointer-events:none;"></div>
+
+<div class="nav-strip">
+    <a href="{{ url_for('main.start_basketball') }}"> Home</a>
+</div>
+
+<!-- ── Logo Strip(s) ── -->
+
+{% for row in logo_rows %}
+<div class="logo-strip">
+  {% for team in row %}
+  <div class="logo-wrap {% if loop.first and loop.revcount == loop.length %}active{% endif %}"
+       data-team="{{ team.name }}">
+    <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/basketball/{{ team.name }}_bk.png"
+         alt="{{ team.name }}"
+         onerror="this.style.opacity='0.2'">
+    <div class="team-label">{{ team.name }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+
+<!-- ── 3-pane Draft Body ── -->
+<div class="draft-body">
+
+  <!-- Left: all rosters -->
+  <div class="pane-left">
+    <h6>Rosters</h6>
+    {% for team in all_teams %}
+    <div class="roster-team">
+      <div class="t-name">{{ team.name }}</div>
+      {% for slot in roster_slots %}
+      <div class="t-pick">{{ slot }}: —</div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Center: player pool -->
+  <!-- Center: player pool -->
+<div class="pane-center">
+
+    <div class="pane-center-header">
+        <div class="draft-title">{{ draftname }} — Player Pool</div>
+        <div class="pos-filter">
+            <button class="btn-pos active" onclick="filterPos(this,'ALL')">All</button>
+            <button class="btn-pos" onclick="filterPos(this,'C')">C</button>
+            <button class="btn-pos" onclick="filterPos(this,'F')">F</button>
+            <button class="btn-pos" onclick="filterPos(this,'G')">G</button>
+        </div>
+    </div>
+
+    <table class="player-table">
+        <thead>
+            <thead>
+              <tr>
+                  <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
+                  <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
+                  <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
+                  <th onclick="sortTable(3)">PPG <span class="sort-icon">↕</span></th>
+                  <th onclick="sortTable(4)">RPG <span class="sort-icon">↕</span></th>
+                  <th onclick="sortTable(5)">APG <span class="sort-icon">↕</span></th>
+              </tr>
+          </thead>
+        </thead>
+        <tbody id="playerBody">
+            {% for p in players %}
+            <tr data-pos="{{ p.Pos }}">
+                <td class="pos-badge">{{ p.Pos }}</td>
+                <td>{{ p.FirstName }} {{ p.LastName }}</td>
+                <td>{{ p.Team }}</td>
+                <td>{{ p.ptspgm if p.ptspgm is defined else '—' }}</td>
+                <td>{{ p.rbspgm if p.rbspgm is defined else '—' }}</td>
+                <td>{{ p.astpgm if p.astpgm is defined else '—' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</div>
+
+  <!-- Right: on-the-clock team roster -->
+  <div class="pane-right">
+    <h6>On the Clock</h6>
+    <div class="on-clock" id="clockTeam">{{ all_teams[0].name }}</div>
+    {% for slot in roster_slots %}
+    <div class="slot-row">
+      <span class="slot-label">{{ slot }}</span>
+      <span class="slot-player" id="slot-{{ loop.index0 }}">—</span>
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+
+<script>
+  function filterPos(btn, pos) {
+    document.querySelectorAll('.btn-pos').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('#playerBody tr').forEach(row => {
+      row.style.display = (pos === 'ALL' || row.dataset.pos === pos) ? '' : 'none';
+    });
+  }
+</script>
+
+{% endblock %}
+
+
+
