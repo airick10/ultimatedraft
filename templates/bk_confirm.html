@@ -5,11 +5,7 @@
 
   <style>
     body {
-      background-color: #d4f0e1;
-      background-image: url("{{ url_for('static', filename='bk_back.jpg') }}");
-      background-size: cover;
-      background-repeat: no-repeat;
-      background-attachment: fixed;
+       background: #d4f0e1 url("{{ url_for('static', filename='bk_back.jpg') }}") center center / cover no-repeat fixed;
     }
 
     .table-borderless > tbody > tr > td,
@@ -62,6 +58,42 @@
       background-color: rgba(0, 170, 255, 0.15);
     }
   </style>
+
+  <script>
+const numTeams = {{ num_teams }};
+const required = {
+    C: numTeams * 2,
+    F: numTeams * 4,
+    G: numTeams * 4
+};
+
+function validateSelections() {
+    const cCount = document.querySelectorAll('input.pos-C:checked').length;
+    const fCount = document.querySelectorAll('input.pos-F:checked').length;
+    const gCount = document.querySelectorAll('input.pos-G:checked').length;
+
+    const cOk = cCount === required.C;
+    const fOk = fCount === required.F;
+    const gOk = gCount === required.G;
+
+    document.getElementById('submit-btn').disabled = !(cOk && fOk && gOk);
+
+    document.getElementById('c-count').textContent = `${cCount} / ${required.C}`;
+    document.getElementById('f-count').textContent = `${fCount} / ${required.F}`;
+    document.getElementById('g-count').textContent = `${gCount} / ${required.G}`;
+}
+
+function setPositionCheckboxes(positionClass, checked) {
+    const boxes = document.querySelectorAll(`input.${positionClass}`);
+    boxes.forEach(box => {
+        box.checked = checked;
+    });
+
+    validateSelections();
+}
+
+document.addEventListener('DOMContentLoaded', validateSelections);
+</script>
 {% endblock %}
 
 
@@ -82,56 +114,350 @@
   <h2 class='text-light'>Cap: {{ cap }}</h2>
   <p>
   <hr>
+
+  <!--
   {% if pool == "full" %}
   <div class="text-light">
+    <form action="bk_draft" method="POST">
+    <input type="hidden" name="num_teams" value="{{ num_teams }}">
+    <input type="hidden" name="pool" value="full">
+    <input type="hidden" name="cap" value="{{ cap }}">
+
+    {% for team in human_teams %}
+      <input type="hidden" name="human_teams" value="{{ team }}">
+    {% endfor %}
+
+    {% for team in ai_set %}
+      <input type="hidden" name="ai_set" value="{{ team }}">
+    {% endfor %}
     {% for p in players %}
       {{ p.get('FirstName','') }} {{ p.get('LastName','') }}<br>
     {% endfor %}
+    Looks good?
+    <p>
+         <hr>
+    Provide a name for your draft
+    <input type="text" name="draftname" id="draftname">
+    <p>
+    <input type="submit" id="submit-btnfull" value="YES!">
+    </form>
+    <button onclick="window.location.href='{{ url_for('main.start_basketball') }}';">NO
+    </button>
   </div>
 
 {% elif pool == "random" %}
   <div class="text-light">
+    <form action="bk_draft" method="POST">
+    <input type="hidden" name="num_teams" value="{{ num_teams }}">
+    <input type="hidden" name="pool" value="full">
+    <input type="hidden" name="cap" value="{{ cap }}">
+
+    {% for team in human_teams %}
+      <input type="hidden" name="human_teams" value="{{ team }}">
+    {% endfor %}
+
+    {% for team in ai_set %}
+      <input type="hidden" name="ai_set" value="{{ team }}">
+    {% endfor %}
     {% for p in players %}
       {{ p.get('FirstName','') }} {{ p.get('LastName','') }}<br>
     {% endfor %}
+    <p>
+       <hr>
+    Provide a name for your draft
+    <input type="text" name="draftname" id="draftname">
+    <p>
+    <input type="submit" id="submit-btnrandom" value="YES!">
+    </form>
+    <button onclick="window.location.href='{{ url_for('main.start_basketball') }}';">NO
+    </button>
   </div>
 
 {% else %}
   <div class="container-md text-light">
-  <form action="/bk_confirm.php" method="POST">
+  <form action="{{ url_for('main.bk_confirm') }}" method="POST">
+    <input type="hidden" name="num_teams" value="{{ num_teams }}">
+    <input type="hidden" name="pool" value="full">
+    <input type="hidden" name="cap" value="{{ cap }}">
+
+    {% for team in human_teams %}
+      <input type="hidden" name="human_teams" value="{{ team }}">
+    {% endfor %}
+
+    {% for team in ai_set %}
+      <input type="hidden" name="ai_set" value="{{ team }}">
+    {% endfor %}
+
+
     <div class="row">
       <div class="col">
-        <h3>Centers</h3>
-        {% for p in players %}
-          {% if p.get('Pos','') == "C" %}
-          <input type="checkbox" id="{{ p.get('ID','') }}" name="{{ p.get('ID','') }}" value="{{ p.get('ID','') }}">
-            <label for="{{ p.get('ID','') }}">{{ p.get('FirstName','') }} {{ p.get('LastName','') }}</label><br>
-          {% endif %}
-        {% endfor %}
-      </div>
+        <h3>
+            Centers 
+            <span id="c-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
+        </h3>
 
-      <div class="col">
-        <h3>Forwards</h3>
-        {% for p in players %}
-          {% if p.get('Pos','') == "F" %}
-            <input type="checkbox" id="{{ p.get('ID','') }}" name="{{ p.get('ID','') }}" value="{{ p.get('ID','') }}">
-            <label for="{{ p.get('ID','') }}">{{ p.get('FirstName','') }} {{ p.get('LastName','') }}</label><br>
-          {% endif %}
-        {% endfor %}
-      </div>
+        <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-C', true)">
+            Check All Centers
+        </button>
 
-      <div class="col">
-        <h3>Guards</h3>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-C', false)">
+            Reset Centers
+        </button>
+
+        <br><br>
+
         {% for p in players %}
-          {% if p.get('Pos','') == "G" %}
-            <input type="checkbox" id="{{ p.get('ID','') }}" name="{{ p.get('ID','') }}" value="{{ p.get('ID','') }}">
-            <label for="{{ p.get('ID','') }}">{{ p.get('FirstName','') }} {{ p.get('LastName','') }}</label><br>
-          {% endif %}
+            {% if p.get('Pos','') == "C" %}
+                <input 
+                    type="checkbox" 
+                    class="pos-C" 
+                    id="player-{{ p.get('ID','') }}" 
+                    name="selected_player_ids" 
+                    value="{{ p.get('ID','') }}" 
+                    onchange="validateSelections()"
+                >
+                <label for="player-{{ p.get('ID','') }}">
+                    {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                </label><br>
+            {% endif %}
         {% endfor %}
-      </div>
     </div>
-      <input type="submit" value="Submit">
+
+      <div class="col">
+          <h3>
+              Forwards 
+              <span id="f-count" class="text-warning">0 / {{ num_teams * 4 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-F', true)">
+              Check All Forwards
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-F', false)">
+              Reset Forwards
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('Pos','') == "F" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-F" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+      <div class="col">
+          <h3>
+              Guards 
+              <span id="g-count" class="text-warning">0 / {{ num_teams * 4 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-G', true)">
+              Check All Guards
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-G', false)">
+              Reset Guards
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('Pos','') == "G" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-G" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+
+    </div>
+    <p>
+      <input type="submit" id="submit-btn" value="Submit" disabled>
 </form>
+  </div>
+
+{% endif %}
+-->
+
+{% if mode == "final_confirm" %}
+
+  <div class="text-light">
+    <form action="{{ url_for('main.bk_draft') }}" method="POST">
+      <input type="hidden" name="num_teams" value="{{ num_teams }}">
+      <input type="hidden" name="pool" value="{{ pool }}">
+      <input type="hidden" name="cap" value="{{ cap }}">
+
+      {% for team in human_teams %}
+        <input type="hidden" name="human_teams" value="{{ team }}">
+      {% endfor %}
+
+      {% for team in ai_set %}
+        <input type="hidden" name="ai_set" value="{{ team }}">
+      {% endfor %}
+
+      {% for p in players %}
+        <input type="hidden" name="selected_player_ids" value="{{ p.get('ID') or p.get('id') }}">
+        {{ p.get('FirstName','') }} {{ p.get('LastName','') }}<br>
+      {% endfor %}
+
+      <hr>
+
+      Looks good?
+
+      <p>
+      Provide a name for your draft:
+      <input type="text" name="draftname" id="draftname">
+
+      <p>
+      <input type="submit" value="YES!">
+    </form>
+
+    <button onclick="window.location.href='{{ url_for('main.start_basketball') }}';">
+      NO
+    </button>
+  </div>
+
+{% elif mode == "select_players" %}
+
+  <div class="container-md text-light">
+    <form action="{{ url_for('main.bk_confirm') }}" method="POST">
+      <input type="hidden" name="num_teams" value="{{ num_teams }}">
+      <input type="hidden" name="pool" value="{{ pool }}">
+      <input type="hidden" name="cap" value="{{ cap }}">
+
+      {% for team in human_teams %}
+        <input type="hidden" name="human_teams" value="{{ team }}">
+      {% endfor %}
+
+      {% for team in ai_set %}
+        <input type="hidden" name="ai_set" value="{{ team }}">
+      {% endfor %}
+
+      <div class="row">
+      <div class="col">
+        <h3>
+            Centers 
+            <span id="c-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
+        </h3>
+
+        <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-C', true)">
+            Check All Centers
+        </button>
+
+        <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-C', false)">
+            Reset Centers
+        </button>
+
+        <br><br>
+
+        {% for p in players %}
+            {% if p.get('Pos','') == "C" %}
+                <input 
+                    type="checkbox" 
+                    class="pos-C" 
+                    id="player-{{ p.get('ID','') }}" 
+                    name="selected_player_ids" 
+                    value="{{ p.get('ID','') }}" 
+                    onchange="validateSelections()"
+                >
+                <label for="player-{{ p.get('ID','') }}">
+                    {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                </label><br>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+      <div class="col">
+          <h3>
+              Forwards 
+              <span id="f-count" class="text-warning">0 / {{ num_teams * 4 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-F', true)">
+              Check All Forwards
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-F', false)">
+              Reset Forwards
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('Pos','') == "F" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-F" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+      <div class="col">
+          <h3>
+              Guards 
+              <span id="g-count" class="text-warning">0 / {{ num_teams * 4 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-G', true)">
+              Check All Guards
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-G', false)">
+              Reset Guards
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('Pos','') == "G" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-G" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+
+    </div>
+    <p>
+      <input type="submit" id="submit-btn" value="Submit" disabled>
+    </form>
   </div>
 
 {% endif %}
