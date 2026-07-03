@@ -5,11 +5,7 @@
 
   <style>
     body {
-      background-color: #d4f0e1;
-      background-image: url("{{ url_for('static', filename='bk_back.jpg') }}");
-      background-size: cover;
-      background-repeat: no-repeat;
-      background-attachment: fixed;
+       background: #d4f0e1 url("{{ url_for('static', filename='base_back.jpg') }}") center center / cover no-repeat fixed;
     }
 
     .table-borderless > tbody > tr > td,
@@ -62,6 +58,68 @@
       background-color: rgba(0, 170, 255, 0.15);
     }
   </style>
+  <script>
+  const numTeams = {{ num_teams }};
+const required = {
+    C:   numTeams * 2,
+    '1B': numTeams * 2,
+    '2B': numTeams * 2,
+    '3B': numTeams * 2,
+    SS: numTeams * 2,
+    LF: numTeams * 2,
+    CF: numTeams * 2,
+    RF: numTeams * 2,
+    SP: numTeams * 7,
+    RP: numTeams * 7,
+};
+
+function validateSelections() {
+    const cCount  = document.querySelectorAll('input.pos-C:checked').length;
+    const fBCount = document.querySelectorAll('input.pos-1B:checked').length;
+    const sBCount = document.querySelectorAll('input.pos-2B:checked').length;
+    const tBCount = document.querySelectorAll('input.pos-3B:checked').length;
+    const ssCount = document.querySelectorAll('input.pos-SS:checked').length;
+    const lfCount = document.querySelectorAll('input.pos-LF:checked').length;
+    const cfCount = document.querySelectorAll('input.pos-CF:checked').length;
+    const rfCount = document.querySelectorAll('input.pos-RF:checked').length;
+    const sPCount = document.querySelectorAll('input.pos-SP:checked').length;
+    const rPCount = document.querySelectorAll('input.pos-RP:checked').length;
+
+    const cOk = cCount === required['C'];
+    const fBOk = fBCount === required['1B'];
+    const sBOk = sBCount === required['2B'];
+    const tBOk = tBCount === required['3B'];
+    const ssOk = ssCount === required['SS'];
+    const lfOk = ssCount === required['LF'];
+    const cfOk = ssCount === required['CF'];
+    const rfOk = ssCount === required['RF'];
+    const sPOk = ssCount === required['SP'];
+    const rPOk = ssCount === required['rP'];
+
+    document.getElementById('submit-btn').disabled = !(cOk && fBOk && sBOk && tBOK && ssOK && lfOK && cfOK && rfOK && sPOK && rPOK);
+
+    document.getElementById('c-count').textContent  = `${cCount} / ${required['C']}`;
+    document.getElementById('1b-count').textContent = `${fBCount} / ${required['1B']}`;
+    document.getElementById('2b-count').textContent = `${sBCount} / ${required['2B']}`;
+    document.getElementById('3b-count').textContent = `${tBCount} / ${required['3B']}`;
+    document.getElementById('ss-count').textContent = `${ssCount} / ${required['SS']}`;
+    document.getElementById('lf-count').textContent = `${lfCount} / ${required['LF']}`;
+    document.getElementById('cf-count').textContent = `${cfCount} / ${required['CF']}`;
+    document.getElementById('rf-count').textContent = `${rfCount} / ${required['RF']}`;
+    document.getElementById('sp-count').textContent = `${sPCount} / ${required['SP']}`;
+    document.getElementById('rp-count').textContent = `${rPCount} / ${required['RP']}`;
+
+}
+
+function setPositionCheckboxes(positionClass, checked) {
+    document.querySelectorAll(`input.${positionClass}`).forEach(box => {
+        box.checked = checked;
+    });
+    validateSelections();
+}
+
+document.addEventListener('DOMContentLoaded', validateSelections);
+</script>
 {% endblock %}
 
 
@@ -80,9 +138,409 @@
   {% endfor %}
   <h2 class='text-light'>Pool: {{ pool }}</h2>
   <h2 class='text-light'>Cap: {{ cap }}</h2>
+  <p>
+  <hr>
 
- 
-{% endblock %}
+  
+
+{% if mode == "final_confirm" %}
+
+  <div class="text-light">
+    <form action="{{ url_for('main.bb_draft') }}" method="POST">
+      <input type="hidden" name="num_teams" value="{{ num_teams }}">
+      <input type="hidden" name="pool" value="{{ pool }}">
+      <input type="hidden" name="cap" value="{{ cap }}">
+
+      {% for team in human_teams %}
+        <input type="hidden" name="human_teams" value="{{ team }}">
+      {% endfor %}
+
+      {% for team in ai_set %}
+        <input type="hidden" name="ai_set" value="{{ team }}">
+      {% endfor %}
+
+      {% for p in players %}
+        <input type="hidden" name="selected_player_ids" value="{{ p.get('ID') or p.get('id') }}">
+        {{ p.get('FirstName','') }} {{ p.get('LastName','') }}<br>
+      {% endfor %}
+
+      <hr>
+
+      Looks good?
+
+      <p>
+      Provide a name for your draft:
+      <input type="text" name="draftname" id="draftname">
+
+      <p>
+      <input type="submit" value="YES!">
+    </form>
+
+    <button onclick="window.location.href='{{ url_for('main.start_baseball') }}';">
+      NO
+    </button>
+  </div>
+
+{% elif mode == "select_players" %}
+
+  <div class="container-md text-light">
+    <form action="{{ url_for('main.bb_confirm') }}" method="POST">
+      <input type="hidden" name="num_teams" value="{{ num_teams }}">
+      <input type="hidden" name="pool" value="{{ pool }}">
+      <input type="hidden" name="cap" value="{{ cap }}">
+
+      {% for team in human_teams %}
+        <input type="hidden" name="human_teams" value="{{ team }}">
+      {% endfor %}
+
+      {% for team in ai_set %}
+        <input type="hidden" name="ai_set" value="{{ team }}">
+      {% endfor %}
+
+      <div class="row">
+      <div class="col">
+        <h3>
+            Catchers 
+            <span id="c-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
+        </h3>
+
+        <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-C', true)">
+            Check All Catchers
+        </button>
+
+        <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-C', false)">
+            Reset Catchers
+        </button>
+
+        <br><br>
+
+        {% for p in players %}
+            {% if p.get('short_pos','') == "C" %}
+                <input 
+                    type="checkbox" 
+                    class="pos-C" 
+                    id="player-{{ p.get('ID','') }}" 
+                    name="selected_player_ids" 
+                    value="{{ p.get('ID','') }}" 
+                    onchange="validateSelections()"
+                >
+                <label for="player-{{ p.get('ID','') }}">
+                    {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                </label><br>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+      <div class="col">
+          <h3>
+              First Basemen 
+              <span id="1b-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-1B', true)">
+              Check All First Basemen
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-1B', false)">
+              Reset First Basemen
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('short_pos','') == "1B" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-1B" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+      <div class="col">
+          <h3>
+              Second Basemen
+              <span id="2b-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-2B', true)">
+              Check All Second Basemen
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-2B', false)">
+              Reset Second Basemen
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('short_pos','') == "2B" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-2B" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+
+    <div class="col">
+          <h3>
+              Third Basemen
+              <span id="3b-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-3B', true)">
+              Check All Third Basemen
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-3B', false)">
+              Reset Third Basemen
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('short_pos','') == "3B" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-3B" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+
+    <div class="col">
+          <h3>
+              Shortstops
+              <span id="ss-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-SS', true)">
+              Check All Shortstops
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-SS', false)">
+              Reset Shortstops
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('short_pos','') == "SS" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-SS" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+    <div class="col">
+          <h3>
+              Left Fielders
+              <span id="lf-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-LF', true)">
+              Check All Left Fielders
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-LF', false)">
+              Reset Left Fielders
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('short_pos','') == "LF" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-LF" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+    <div class="col">
+          <h3>
+              Center Fielders
+              <span id="cf-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-CF', true)">
+              Check All Center Fielders
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-CF', false)">
+              Reset Center Fielders
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('short_pos','') == "CF" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-CF" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+
+    <div class="col">
+          <h3>
+              Right Fielders
+              <span id="rf-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-RF', true)">
+              Check All Right Fielders
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-RF', false)">
+              Reset RightFielders
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('short_pos','') == "RF" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-RF" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+
+    <div class="col">
+          <h3>
+              Starting Pitchers
+              <span id="sp-count" class="text-warning">0 / {{ num_teams * 7 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-SP', true)">
+              Check All Starting Pitchers
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-SP', false)">
+              Reset Starting Pitchers
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('short_pos','') == "SP" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-SP" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+    <div class="col">
+          <h3>
+              Relief Pitchers
+              <span id="rp-count" class="text-warning">0 / {{ num_teams * 7 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-RP', true)">
+              Check All Relief Pitchers
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-RP', false)">
+              Reset Relief Pitchers
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('short_pos','') == "SP" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-RP" 
+                      id="player-{{ p.get('ID','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('ID','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('ID','') }}">
+                      {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+
+    </div>
+    <p>
+      <input type="submit" id="submit-btn" value="Submit" disabled>
+    </form>
+  </div>
+
+{% endif %}
+  {% endblock %}
 
 
 

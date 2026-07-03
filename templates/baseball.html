@@ -1,5 +1,7 @@
+{# ultimatebaseballdraft/templates/baseball.html #}
 {% extends "base.html" %}
 {% block title %}Baseball Draft{% endblock %}
+
 {% block scripts %}
   {{ super() }}
   <script>
@@ -11,16 +13,12 @@
     });
   </script>
 {% endblock %}
+
 {% block css %}
   {{ super() }}
-
   <style>
     body {
-      background-color: #d4f0e1;
-      background-image: url("{{ url_for('static', filename='base_back.jpg') }}");
-      background-size: cover;
-      background-repeat: no-repeat;
-      background-attachment: fixed;
+      background: #d4f0e1 url("{{ url_for('static', filename='base_back.jpg') }}") center center / cover no-repeat fixed;
     }
 
     .table-borderless > tbody > tr > td,
@@ -37,6 +35,14 @@
     }
 
     .link-dark:hover {
+      text-decoration: underline !important;
+    }
+
+    a.link-light {
+      text-decoration: none !important;
+    }
+
+    .link-light:hover {
       text-decoration: underline !important;
     }
 
@@ -60,6 +66,7 @@
       padding: 4px;
       transition: border-color 0.15s ease;
     }
+
     .logo-checkbox:checked + .logo-label {
       border-color: #00aaff;
       background-color: rgba(0, 170, 255, 0.15);
@@ -68,52 +75,66 @@
 {% endblock %}
 
 {% block body %}
+  <h1>
+    <a class="link-offset-2 link-offset-3-hover link-underline link-underline-opacity-50 link-underline-opacity-75-hover link-light" href="{{ url_for('main.index') }}">
+      Home
+    </a>
+  </h1>
 
-  <h1><a class="link-offset-2 link-offset-3-hover link-underline link-underline-opacity-50 link-underline-opacity-75-hover link-light" href="{{ url_for('main.index') }}">Home</a></h1>
+  <h1 class="text-light">Load Saved Draft</h1>
 
-  <h1 class='text-light'>Load Saved Draft</h1>
-
-  <p>
-  <form action="/bb_confirm" method=POST>
-  <h1 class='text-light'>How many teams?</h1>
-  <br>
-  <select name='num_teams' id="num_teams" hx-get="/show_bb_logos" hx-target="#show_bb_logos" hx-trigger="change">
-    <option value='4' selected="selected">4</option>
-    <option value='8'>8</option>
-    <option value='12'>12</option>
-    <option value='16'>16</option>
-    <option value='24'>24</option>
-    <option value='32'>32</option>
-  </select>
-  <p>
-  <!-- Show grid of buttons for teams.  Clicking a button (selects it) with a border showing.  Like a checkbox -->
-  <br>
-  <div class="container" id='show_bb_logos'>
-
-  </div>
-  <hr>
-  <p>
-    <div id="draft-options" style="display:none;">
-      <h1 class='text-light'>Draft Pool Size?</h1>
-      <br>
-      <select name='pool' id='pool'>
-        <option value='full'>Complete</option>
-        <option value='random'>Random</option>
-        <option value='custom'>Custom</option>
-      </select>
-      <p>
-      <h1 class='text-light'>Salary Cap?</h1>
-      <br>
-      <input type="radio" id="yes" name="cap" value="Yes"><label for="yes">Yes</label>
-      <input type="radio" id="no" name="cap" value="No"><label for="yes">No</label>
-      <p>
-          <input type='submit' value='Submit'>
-  </div>
-
+  <form action="{{ url_for('main.bb_load') }}" method="POST">
+    <select name="saved_draft_file" id="saved_draft_file">
+      <option value="">Select a saved draft</option>
+      {% for filename in saved_drafts %}
+        <option value="{{ filename }}">{{ filename }}</option>
+      {% endfor %}
+    </select>
+    <input type="submit" value="Open Draft">
   </form>
 
- 
+  <hr>
+
+  <form action="/bb_confirm" method="POST">
+    <h1 class="text-light">How many teams?</h1>
+    <br>
+    <select name="num_teams" id="num_teams" hx-get="/show_bb_logos" hx-target="#show_bb_logos" hx-trigger="change">
+      <option value="4" selected="selected">4</option>
+      <option value="8">8</option>
+      <option value="12">12</option>
+      <option value="16">16</option>
+      <option value="24">24</option>
+      <option value="32">32</option>
+    </select>
+
+    <p><br></p>
+
+    <div class="container" id="show_bb_logos"></div>
+
+    <hr>
+
+    <div id="draft-options" style="display:none;">
+      <h1 class="text-light">Draft Pool Size?</h1>
+      <br>
+      <select name="pool" id="pool">
+        <option value="full">Complete</option>
+        <option value="random">Random</option>
+        <option value="custom">Custom</option>
+      </select>
+
+      <p></p>
+
+      <h1 class="text-light">Salary Cap?</h1>
+      <br>
+      <input type="radio" id="yes" name="cap" value="Yes">
+      <label for="yes">Yes</label>
+
+      <input type="radio" id="no" name="cap" value="No">
+      <label for="no">No</label>
+
+      <p></p>
+
+      <input type="submit" value="Submit">
+    </div>
+  </form>
 {% endblock %}
-
-
-
