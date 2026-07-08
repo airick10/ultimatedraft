@@ -128,8 +128,8 @@ def load_baseball(pool, num_teams):
         num_lf = num_teams * 2
         num_cf = num_teams * 2
         num_rf = num_teams * 2
-        num_sp = num_teams * 10
-        num_rp = num_teams * 10
+        num_sp = num_teams * 7
+        num_rp = num_teams * 7
 
         people = (
             random.sample(c,  min(num_c,  len(c)))  +
@@ -161,10 +161,10 @@ def load_saved_baseball_draft(filename):
     if "_bb_" not in stem:
         raise ValueError(f"Not a baseball draft file: {filename}")
 
-    draftname, timestamp = stem.split("_bb_", 1)
+    draftname, timestamp = stem.split("_bb", 1)
 
-    meta_path = draft_dir / f"{draftname}_bb_meta_{timestamp}.json"
-    log_path = draft_dir / f"{draftname}_bb_log_{timestamp}.json"
+    meta_path = draft_dir / f"{draftname}_bb_meta.json"
+    log_path = draft_dir / f"{draftname}_bb_log.json"
 
     with open(player_path, "r", encoding="utf-8") as f:
         players = json.load(f)
@@ -202,7 +202,7 @@ def initial_save_baseball_json(players, draftname, timestamp):
 
     people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
 
-    filename = f"{draftname}_bb_{timestamp}.json"
+    filename = f"{draftname}_bb.json"
 
     output_dir = Path("drafts")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -225,7 +225,7 @@ def initial_save_baseball_meta_json(
     player_file,
     timestamp
 ):
-    filename = f"{draftname}_bb_meta_{timestamp}.json"
+    filename = f"{draftname}_bb_meta.json"
 
     output_dir = Path("drafts")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -270,7 +270,7 @@ def initial_save_baseball_meta_json(
 
 
 def initial_save_baseball_log_json(draftname, timestamp):
-    filename = f"{draftname}_bb_log_{timestamp}.json"
+    filename = f"{draftname}_bb_log.json"
 
     output_dir = Path("drafts")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -302,6 +302,9 @@ def get_saved_baseball_drafts():
 
     saved_drafts.sort(reverse=True)
     return saved_drafts
+
+
+
 
 # ------------------- BASKETBALL ---------------------------
 
@@ -382,7 +385,7 @@ def initial_save_basketball_json(players, draftname, timestamp):
 
     people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
 
-    filename = f"{draftname}_bk_{timestamp}.json"
+    filename = f"{draftname}_bk.json"
 
     output_dir = Path("drafts")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -405,7 +408,7 @@ def initial_save_basketball_meta_json(
     player_file,
     timestamp
 ):
-    filename = f"{draftname}_bk_meta_{timestamp}.json"
+    filename = f"{draftname}_bk_meta.json"
 
     output_dir = Path("drafts")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -450,7 +453,7 @@ def initial_save_basketball_meta_json(
 
 
 def initial_save_basketball_log_json(draftname, timestamp):
-    filename = f"{draftname}_bk_log_{timestamp}.json"
+    filename = f"{draftname}_bk_log.json"
 
     output_dir = Path("drafts")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -496,10 +499,10 @@ def load_saved_basketball_draft(filename):
     if "_bk_" not in stem:
         raise ValueError(f"Not a basketball draft file: {filename}")
 
-    draftname, timestamp = stem.split("_bk_", 1)
+    draftname, timestamp = stem.split("_bk", 1)
 
-    meta_path = draft_dir / f"{draftname}_bk_meta_{timestamp}.json"
-    log_path = draft_dir / f"{draftname}_bk_log_{timestamp}.json"
+    meta_path = draft_dir / f"{draftname}_bk_meta.json"
+    log_path = draft_dir / f"{draftname}_bk_log.json"
 
     with open(player_path, "r", encoding="utf-8") as f:
         players = json.load(f)
@@ -524,6 +527,11 @@ def load_saved_basketball_draft(filename):
         "draftname": draftname,
         "timestamp": timestamp,
     }
+
+
+
+
+#------------ Football -------------------------------------
 
 
 
