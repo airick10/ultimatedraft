@@ -290,15 +290,97 @@ body::before {
 .slot-player { color:#888; font-style:italic; }
 .slot-player.filled { color:#e0e0e0; font-style:normal; }
 </style>
+{% endblock %}
 
+{% block scripts %}
 <script>
+const socket = io();
+const currentDraftname = "{{ draftname }}";
+const currentSport = "{{ sport }}";
+let selectedPlayerId = null;
 let sortDir = {};
 
+// ── SocketIO connection ──
+socket.on('connect', () => {
+    console.log('SocketIO connected:', socket.id);
+});
+socket.on('disconnect', () => {
+    console.log('SocketIO disconnected');
+});
+
+// ── Send pick to server ──
+function draftPlayer() {
+    console.log('draftPlayer fired, selectedPlayerId:', selectedPlayerId);
+    if (!selectedPlayerId) return;
+    socket.emit('make_pick', {
+        draftname: currentDraftname,
+        player_id: selectedPlayerId,
+        sport:     currentSport
+    });
+}
+
+// ── Receive pick from server ──
+socket.on('pick_made', (entry) => {
+    console.log('Pick made:', entry);
+
+    // mark player row as drafted
+    const row = document.querySelector(`tr[data-id="${entry.id}"]`);
+    if (row) row.classList.add('drafted');
+
+    // clear selected state
+    selectedPlayerId = null;
+    document.getElementById('draftBtn').style.display = 'none';
+    document.getElementById('selectedName').textContent = 'Click a player to select';
+    document.getElementById('selectedStats').textContent = '';
+
+    // add to draft log
+    const logDiv = document.getElementById('draftLog');
+    if (logDiv) {
+        const noPicksMsg = logDiv.querySelector('.log-empty');
+        if (noPicksMsg) noPicksMsg.remove();
+        const el = document.createElement('div');
+        el.className = 'log-entry';
+        el.textContent = `${entry.pick}. ${entry.team} — ${entry.pos} ${entry.player}`;
+        logDiv.prepend(el);
+    }
+});
+
+socket.on('pick_error', (data) => {
+    console.error('Pick error:', data.message);
+    alert(data.message);
+});
+
+// ── DOM ready ──
+document.addEventListener('DOMContentLoaded', () => {
+    // show first team roster on load
+    const first = document.querySelector('.roster-team');
+    if (first) first.style.display = 'block';
+
+    // player row click handler
+    document.querySelectorAll('#playerBody tr').forEach(row => {
+        row.addEventListener('click', () => {
+            selectedPlayerId = row.dataset.id;
+            const cells = row.cells;
+            const pos  = cells[0].innerText;
+            const name = cells[1].innerText;
+            const team = cells[2].innerText;
+            const s1   = cells[3].innerText;
+            const s2   = cells[4].innerText;
+            const s3   = cells[5].innerText;
+            document.getElementById('selectedName').textContent  = `${pos} — ${name}`;
+            document.getElementById('selectedStats').textContent = `${team} | ${s1} / ${s2} / ${s3}`;
+            document.getElementById('draftBtn').style.display    = 'inline-block';
+            document.querySelectorAll('#playerBody tr').forEach(r => r.classList.remove('selected-row'));
+            row.classList.add('selected-row');
+        });
+    });
+});
+
+// ── Sort table ──
 function sortTable(col) {
     const tbody = document.getElementById('playerBody');
     const rows = Array.from(tbody.querySelectorAll('tr'));
     sortDir[col] = !sortDir[col];
-
     rows.sort((a, b) => {
         let aVal = a.cells[col].innerText.trim();
         let bVal = b.cells[col].innerText.trim();
@@ -314,52 +396,30 @@ function sortTable(col) {
         }
         return sortDir[col] ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
     });
-
     rows.forEach(r => tbody.appendChild(r));
-
     document.querySelectorAll('.sort-icon').forEach((el, i) => {
         el.textContent = i === col ? (sortDir[col] ? '↑' : '↓') : '↕';
     });
 }
 
+// ── Filter by position ──
+function filterPos(btn, pos) {
+    document.querySelectorAll('.btn-pos').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('#playerBody tr').forEach(row => {
+        row.style.display = (pos === 'ALL' || row.dataset.pos === pos) ? '' : 'none';
+    });
+}
+
+// ── Roster dropdown ──
 function showRoster(teamName) {
     document.querySelectorAll('.roster-team').forEach(el => el.style.display = 'none');
     document.getElementById(`roster-${teamName}`).style.display = 'block';
 }
-
-function draftPlayer() {
-    // wire to SocketIO later
-    console.log('Draft:', document.getElementById('selectedName').textContent);
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    // show first team roster
-    const first = document.querySelector('.roster-team');
-    if (first) first.style.display = 'block';
-
-    // player row click handler
-    document.querySelectorAll('#playerBody tr').forEach(row => {
-        row.addEventListener('click', () => {
-            const cells = row.cells;
-            const pos  = cells[0].innerText;
-            const name = cells[1].innerText;
-            const team = cells[2].innerText;
-            const s1   = cells[3].innerText;
-            const s2   = cells[4].innerText;
-            const s3   = cells[5].innerText;
-
-            document.getElementById('selectedName').textContent  = `${pos} — ${name}`;
-            document.getElementById('selectedStats').textContent = `${team} | ${s1} / ${s2} / ${s3}`;
-            document.getElementById('draftBtn').style.display    = 'inline-block';
-
-            document.querySelectorAll('#playerBody tr').forEach(r => r.classList.remove('selected-row'));
-            row.classList.add('selected-row');
-        });
-    });
-});
 </script>
-
 {% endblock %}
+
+
 {% block body %}
 <div style="position:fixed;inset:0;background:url('{{ url_for('static', filename='hardwood.jpg') }}') center/cover;opacity:0.3;z-index:9999;pointer-events:none;"></div>
 
@@ -385,21 +445,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   <!-- Left: rosters with dropdown -->
   <div class="pane-left">
-    <h6>Rosters</h6>
-    <select id="rosterSelect" onchange="showRoster(this.value)" class="roster-select">
-        {% for team in all_teams %}
-        <option value="{{ team.name }}">{{ team.name }}</option>
-        {% endfor %}
-    </select>
-    {% for team in all_teams %}
-    <div class="roster-team" id="roster-{{ team.name }}" style="display:none">
-        <div class="t-name">{{ team.name }}</div>
-        {% for slot in roster_slots %}
-        <div class="t-pick" id="slot-{{ team.name }}-{{ loop.index0 }}">{{ slot }}: —</div>
-        {% endfor %}
-    </div>
+    <h6>Draft Log</h6>
+    {% for entry in draft_log %}
+    <div class="log-entry">{{ entry }}</div>
+    {% else %}
+    <div class="log-empty" style="color:#555; font-size:.72rem; font-style:italic;">No picks yet</div>
     {% endfor %}
-  </div>
+</div>
 
   <!-- Center: player pool -->
   <div class="pane-center">
@@ -432,7 +484,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <table class="player-table">
             <tbody id="playerBody">
                 {% for p in players %}
-                <tr data-pos="{{ p.Pos }}">
+                <tr data-pos="{{ p.Pos }}" data-id="{{ p.id }}">
                     <td class="pos-badge">{{ p.Pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
                     <td>{{ p.Team }}</td>

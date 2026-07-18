@@ -295,8 +295,67 @@ body::before {
   .slot-player { color:#888; font-style:italic; }
   .slot-player.filled { color:#e0e0e0; font-style:normal; }
 </style>
+{% endblock %}
 
+{% block scripts %}
 <script>
+const socket = io();
+const currentDraftname = "{{ draftname }}";
+const currentSport = "{{ sport }}";
+let selectedPlayerId = null;
+let sortDir = {};
+
+// ── SocketIO connection ──
+socket.on('connect', () => {
+    console.log('SocketIO connected:', socket.id);
+});
+socket.on('disconnect', () => {
+    console.log('SocketIO disconnected');
+});
+
+// ── Send pick to server ──
+function draftPlayer() {
+    console.log('draftPlayer fired, selectedPlayerId:', selectedPlayerId);
+    if (!selectedPlayerId) return;
+    socket.emit('make_pick', {
+        draftname: currentDraftname,
+        player_id: selectedPlayerId,
+        sport:     currentSport
+    });
+}
+
+// ── Receive pick from server ──
+socket.on('pick_made', (entry) => {
+    console.log('Pick made:', entry);
+
+    // mark player row as drafted
+    const row = document.querySelector(`tr[data-id="${entry.id}"]`);
+    if (row) row.classList.add('drafted');
+
+    // clear selected state
+    selectedPlayerId = null;
+    document.getElementById('draftBtn').style.display = 'none';
+    document.getElementById('selectedName').textContent = 'Click a player to select';
+    document.getElementById('selectedStats').textContent = '';
+
+    // add to draft log
+    const logDiv = document.getElementById('draftLog');
+    if (logDiv) {
+        const noPicksMsg = logDiv.querySelector('.log-empty');
+        if (noPicksMsg) noPicksMsg.remove();
+        const el = document.createElement('div');
+        el.className = 'log-entry';
+        el.textContent = `${entry.pick}. ${entry.team} — ${entry.pos} ${entry.player}`;
+        logDiv.prepend(el);
+    }
+});
+
+socket.on('pick_error', (data) => {
+    console.error('Pick error:', data.message);
+    alert(data.message);
+});
+
+// ── DOM ready ──
 document.addEventListener('DOMContentLoaded', () => {
     // show first team roster on load
     const first = document.querySelector('.roster-team');
@@ -305,6 +364,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // player row click handler
     document.querySelectorAll('#playerBody tr').forEach(row => {
         row.addEventListener('click', () => {
+            selectedPlayerId = row.dataset.id;
             const cells = row.cells;
             const pos  = cells[0].innerText;
             const name = cells[1].innerText;
@@ -312,69 +372,68 @@ document.addEventListener('DOMContentLoaded', () => {
             const s1   = cells[3].innerText;
             const s2   = cells[4].innerText;
             const s3   = cells[5].innerText;
-
             document.getElementById('selectedName').textContent  = `${pos} — ${name}`;
             document.getElementById('selectedStats').textContent = `${team} | ${s1} / ${s2} / ${s3}`;
             document.getElementById('draftBtn').style.display    = 'inline-block';
-
             document.querySelectorAll('#playerBody tr').forEach(r => r.classList.remove('selected-row'));
             row.classList.add('selected-row');
         });
     });
 });
 
-let sortDir = {};
-
+// ── Sort table ──
 function sortTable(col) {
     const tbody = document.getElementById('playerBody');
     const rows = Array.from(tbody.querySelectorAll('tr'));
-    sortDir[col] = !sortDir[col];  // toggle asc/desc
-
+    sortDir[col] = !sortDir[col];
     rows.sort((a, b) => {
         let aVal = a.cells[col].innerText.trim();
         let bVal = b.cells[col].innerText.trim();
         if (col === 1) {
             const aLast = aVal.split(' ').pop();
             const bLast = bVal.split(' ').pop();
-            return sortDir[col]
-                ? aLast.localeCompare(bLast)
-                : bLast.localeCompare(aLast);
+            return sortDir[col] ? aLast.localeCompare(bLast) : bLast.localeCompare(aLast);
         }
-        // numeric sort for PPG/RPG/APG cols
         if (col >= 3) {
             aVal = parseFloat(aVal) || 0;
             bVal = parseFloat(bVal) || 0;
             return sortDir[col] ? aVal - bVal : bVal - aVal;
         }
-        return sortDir[col]
-            ? aVal.localeCompare(bVal)
-            : bVal.localeCompare(aVal);
+        return sortDir[col] ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
     });
-
     rows.forEach(r => tbody.appendChild(r));
-
-    // update icons
     document.querySelectorAll('.sort-icon').forEach((el, i) => {
         el.textContent = i === col ? (sortDir[col] ? '↑' : '↓') : '↕';
     });
 }
 
-
-
-function draftPlayer() {
-    // wire this up to SocketIO later
-    console.log('Draft:', document.getElementById('selectedName').textContent);
+// ── Filter by position ──
+function filterPos(btn, pos) {
+    document.querySelectorAll('.btn-pos').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const isPitcher = (pos === 'SP' || pos === 'RP');
+    const isAll = (pos === 'ALL');
+    document.getElementById('hitter-head').style.display = isPitcher ? 'none' : '';
+    document.getElementById('pitcher-head').style.display = isPitcher ? '' : 'none';
+    document.querySelectorAll('#playerBody tr').forEach(row => {
+        const rowPos  = row.dataset.pos;
+        const rowKind = row.dataset.kind;
+        if (isAll) {
+            row.style.display = '';
+        } else {
+            row.style.display = (rowPos === pos) ? '' : 'none';
+        }
+    });
 }
 
+// ── Roster dropdown ──
 function showRoster(teamName) {
     document.querySelectorAll('.roster-team').forEach(el => el.style.display = 'none');
     document.getElementById(`roster-${teamName}`).style.display = 'block';
 }
-
-
 </script>
-
 {% endblock %}
+
 {% block body %}
 <!-- Background, Bootstrap seems to fight this.  So doing an inline -->
 <div style="position:fixed;inset:0;background:url('{{ url_for('static', filename='base_dirt.jpg') }}') center/cover;opacity:0.3;z-index:9999;pointer-events:none;"></div>
@@ -402,25 +461,14 @@ function showRoster(teamName) {
 <!-- ── 3-pane Draft Body ── -->
 <div class="draft-body">
 
-  <!-- Left: all rosters -->
   <div class="pane-left">
-    <h6>Rosters</h6>
-
-    <select id="rosterSelect" onchange="showRoster(this.value)" class="roster-select">
-        {% for team in all_teams %}
-        <option value="{{ team.name }}">{{ team.name }}</option>
-        {% endfor %}
-    </select>
-
-    {% for team in all_teams %}
-    <div class="roster-team" id="roster-{{ team.name }}" style="display:none">
-        <div class="t-name">{{ team.name }}</div>
-        {% for slot in roster_slots %}
-        <div class="t-pick" id="slot-{{ team.name }}-{{ loop.index0 }}">{{ slot }}: —</div>
-        {% endfor %}
-    </div>
+    <h6>Draft Log</h6>
+    {% for entry in draft_log %}
+    <div class="log-entry">{{ entry }}</div>
+    {% else %}
+    <div class="log-empty" style="color:#555; font-size:.72rem; font-style:italic;">No picks yet</div>
     {% endfor %}
-  </div>
+</div>
 
   <!-- Center: player pool -->
 <div class="pane-center">
@@ -468,7 +516,7 @@ function showRoster(teamName) {
           <tbody id="playerBody">
               {% for p in players %}
               {% if p.kind == "hitter" %}
-              <tr data-pos="{{ p.short_pos }}" data-kind="hitter">
+              <tr data-pos="{{ p.short_pos }}" data-kind="hitter" data-id="{{ p.id }}">
                   <td class="pos-badge">{{ p.short_pos }}</td>
                   <td>{{ p.FirstName }} {{ p.LastName }}</td>
                   <td>{{ p.s_team }}</td>
@@ -477,7 +525,7 @@ function showRoster(teamName) {
                   <td>{{ p.b_rbi if p.b_rbi is defined else '—' }}</td>
               </tr>
               {% else %}
-              <tr data-pos="{{ p.short_pos }}" data-kind="pitcher" style="display:none">
+              <tr data-pos="{{ p.short_pos }}" data-kind="pitcher" data-id="{{ p.id }}" style="display:none">
                   <td class="pos-badge">{{ p.short_pos }}</td>
                   <td>{{ p.FirstName }} {{ p.LastName }}</td>
                   <td>{{ p.s_team }}</td>
