@@ -1,6 +1,6 @@
-from ultimatedraft import create_app
+from ultimatedraft import create_app, socketio
 
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5050)
+    socketio.run(app, debug=True, port=5050)

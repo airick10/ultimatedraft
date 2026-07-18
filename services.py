@@ -260,6 +260,8 @@ def initial_save_baseball_meta_json(
         "pool": pool,
         "cap": cap,
         "player_file": str(player_file),
+        "current_pick": 1,
+        "current_team_id": 1,
         "teams": teams
     }
 
@@ -302,6 +304,16 @@ def get_saved_baseball_drafts():
 
     saved_drafts.sort(reverse=True)
     return saved_drafts
+
+def load_baseball_meta(draftname):
+    path = Path("drafts") / f"{draftname}_bb_meta.json"
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_baseball_meta(draftname, meta):
+    path = Path("drafts") / f"{draftname}_bb_meta.json"
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
 
 
 
@@ -443,6 +455,8 @@ def initial_save_basketball_meta_json(
         "pool": pool,
         "cap": cap,
         "player_file": str(player_file),
+        "current_pick": 1,
+        "current_team_id": 1,
         "teams": teams
     }
 
@@ -528,7 +542,15 @@ def load_saved_basketball_draft(filename):
         "timestamp": timestamp,
     }
 
+def load_basketball_meta(draftname):
+    path = Path("drafts") / f"{draftname}_bk_meta.json"
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
+def save_basketball_meta(draftname, meta):
+    path = Path("drafts") / f"{draftname}_bk_meta.json"
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
 
 
 #------------ Football -------------------------------------
@@ -553,6 +575,52 @@ def load_football():
     # Sort by LastName then FirstName; missing keys fall back to ""
     people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
     return people
+
+
+def load_saved_football_draft(filename):
+    draft_dir = Path("drafts")
+    player_path = draft_dir / filename
+
+    if not player_path.exists():
+        raise FileNotFoundError(f"Draft file not found: {filename}")
+
+    stem = player_path.stem
+
+    if "_fb_" not in stem:
+        raise ValueError(f"Not a football draft file: {filename}")
+
+    draftname, timestamp = stem.split("_fb", 1)
+
+    meta_path = draft_dir / f"{draftname}_fb_meta.json"
+    log_path = draft_dir / f"{draftname}_fb_log.json"
+
+    with open(player_path, "r", encoding="utf-8") as f:
+        players = json.load(f)
+
+    meta = {}
+    if meta_path.exists():
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+
+    log = []
+    if log_path.exists():
+        with open(log_path, "r", encoding="utf-8") as f:
+            log = json.load(f)
+
+    return {
+        "players": players,
+        "meta": meta,
+        "log": log,
+        "player_path": player_path,
+        "meta_path": meta_path,
+        "log_path": log_path,
+        "draftname": draftname,
+        "timestamp": timestamp,
+    }
+
+# -------- MISC -----------------------------------------------------
+
+
 
 def get_team_names(num_teams, sport, human_team_name):
     empty = []
@@ -662,3 +730,28 @@ def pos_player_pool(pos: str, people: list[dict]) -> list[dict]:
     pool = random.sample(pool_temp, k=num_players) if num_players > 0 else []
 
     return pool
+
+def get_next_team_id(meta):
+    num_teams = meta["num_teams"]
+    pick = meta["current_pick"]
+    teams = meta["teams"]
+    # snake order: picks 1-8 go forward, 9-16 go backward, etc.
+    round_num = (pick - 1) // num_teams  # 0-indexed round
+    pick_in_round = (pick - 1) % num_teams
+    if round_num % 2 == 0:
+        # forward
+        idx = pick_in_round
+    else:
+        # reverse
+        idx = num_teams - 1 - pick_in_round
+    return teams[idx]["team_id"]
+
+def get_team_by_id(meta, team_id):
+    return next((t for t in meta["teams"] if t["team_id"] == team_id), None)
+
+def append_to_log(log_path, entry):
+    with open(log_path, "r", encoding="utf-8") as f:
+        log = json.load(f)
+    log.append(entry)
+    with open(log_path, "w", encoding="utf-8") as f:
+        json.dump(log, f, indent=2)

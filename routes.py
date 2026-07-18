@@ -19,13 +19,18 @@ from .services import (
     load_saved_basketball_draft,
     get_team_names, 
     get_person, 
-    compute_short_pos, 
     positions, 
     sort_people, 
-    pos_player_pool
+    get_next_team_id,
+    get_team_by_id,
+    append_to_log
 )
 from datetime import datetime
 import random
+import json
+from pathlib import Path
+from flask_socketio import emit
+from . import socketio
 
 
 
@@ -39,7 +44,8 @@ def index():
 @main.route("/baseball")
 def start_baseball():
     #people = load_baseball()
-    return render_template("baseball.html")
+    saved_drafts = get_saved_baseball_drafts()
+    return render_template("baseball.html", saved_drafts=saved_drafts)
 
 @main.route("/show_bb_logos")
 def show_bb_logos():
@@ -76,7 +82,7 @@ def bb_load():
             ai_set.append(team.get("team_name"))
 
     return render_template(
-        "bkdraft.html",
+        "bbdraft.html",
         num_teams=meta.get("num_teams", 0),
         human_teams=human_teams,
         ai_set=ai_set,
@@ -87,7 +93,7 @@ def bb_load():
         draft_log=log,
         draft_file=str(draft_data.get("player_path", "")),
         meta_file=str(draft_data.get("meta_path", "")),
-        log_file=str(draft_data.get("log_path", "")),
+        log_file=str(draft_data.get("log_path", ""))
     )
 
 @main.route("/bb_confirm", methods=["POST"])
@@ -189,6 +195,12 @@ def bb_draft():
                       ai_set, pool, cap, output_path, timestamp)
     log_path    = initial_save_baseball_log_json(draftname, timestamp)
 
+    if not log_path.exists():
+        initial_save_baseball_log_json(draftname)
+
+    with open(log_path, "r", encoding="utf-8") as f:
+        draft_log = json.load(f)
+
     return render_template(
         "bbdraft.html",
         all_teams=all_teams,
@@ -198,7 +210,9 @@ def bb_draft():
         cap=cap,
         draftname=draftname,
         players=people,
-        draft_file=output_path
+        draft_file=output_path,
+        draft_log=draft_log,
+        sport="bb"
     )
 
 #-------- BASKETBALL -----------------------------------------------------------------
@@ -255,7 +269,7 @@ def bk_load():
         draft_log=log,
         draft_file=str(draft_data.get("player_path", "")),
         meta_file=str(draft_data.get("meta_path", "")),
-        log_file=str(draft_data.get("log_path", "")),
+        log_file=str(draft_data.get("log_path", ""))
     )
 
 @main.route("/bk_confirm", methods=["POST"])
@@ -409,6 +423,12 @@ def bk_draft():
                       ai_set, pool, cap, output_path, timestamp)
     log_path    = initial_save_basketball_log_json(draftname, timestamp)
 
+    if not log_path.exists():
+        initial_save_baseball_log_json(draftname)
+
+    with open(log_path, "r", encoding="utf-8") as f:
+        draft_log = json.load(f)
+
     return render_template(
         "bkdraft.html",
         all_teams=all_teams,
@@ -418,8 +438,12 @@ def bk_draft():
         cap=cap,
         draftname=draftname,
         players=people,
-        draft_file=output_path
+        draft_file=output_path,
+        draft_log=draft_log,
+        sport="bk"
     )
+
+# --------- FOOTBALL -------------------------------------------------------------    
 
 @main.route("/football")
 def start_football():
@@ -442,3 +466,107 @@ def fb_confirm():
     cap  = request.form.get("cap")
     ai_set = get_team_names(num_teams - num_human_teams, "fb", human_teams)
     return render_template("fb_confirm.html", num_teams=num_teams, human_teams=human_teams, ai_set=ai_set, pool=pool, cap=cap)
+
+@main.route("/fb_load", methods=["POST"])
+def fb_load():
+    filename = request.form.get("saved_draft_file", "").strip()
+
+    if not filename:
+        abort(400, "No draft file selected.")
+
+    try:
+        draft_data = load_saved_football_draft(filename)
+    except FileNotFoundError:
+        abort(404, "Draft file not found.")
+    except ValueError as exc:
+        abort(400, str(exc))
+
+    meta = draft_data.get("meta", {})
+    log = draft_data.get("log", [])
+    players = draft_data.get("players", [])
+
+    human_teams = []
+    ai_set = []
+
+    for team in meta.get("teams", []):
+        if team.get("type") == "human":
+            human_teams.append(team.get("team_name"))
+        else:
+            ai_set.append(team.get("team_name"))
+
+    return render_template(
+        "fbdraft.html",
+        num_teams=meta.get("num_teams", 0),
+        human_teams=human_teams,
+        ai_set=ai_set,
+        pool=meta.get("pool", ""),
+        cap=meta.get("cap", ""),
+        draftname=meta.get("draftname", draft_data.get("draftname", "")),
+        players=players,
+        draft_log=log,
+        draft_file=str(draft_data.get("player_path", "")),
+        meta_file=str(draft_data.get("meta_path", "")),
+        log_file=str(draft_data.get("log_path", ""))
+    )
+
+
+# ------ SOCKET IO CALLS -------
+
+@socketio.on('make_pick')
+def handle_make_pick(data):
+    draftname = data['draftname']
+    player_id = str(data['player_id'])
+
+    # load correct meta and draft file based on sport
+    if sport == 'bb':
+        meta       = load_baseball_meta(draftname)
+        draft_path = Path("drafts") / f"{draftname}_bb.json"
+        log_path   = Path("drafts") / f"{draftname}_bb_log.json"
+    elif sport == 'bk':
+        meta       = load_basketball_meta(draftname)
+        draft_path = Path("drafts") / f"{draftname}_bk.json"
+        log_path   = Path("drafts") / f"{draftname}_bk_log.json"
+    elif sport == 'fb':
+        meta       = load_football_meta(draftname)
+        draft_path = Path("drafts") / f"{draftname}_fb.json"
+        log_path   = Path("drafts") / f"{draftname}_fb_log.json"
+    else:
+        emit('pick_error', {'message': f'Unknown sport: {sport}'})
+        return
+
+    with open(draft_path, "r", encoding="utf-8") as f:
+        players = json.load(f)
+
+    player = next((p for p in players if str(p.get("id")) == player_id), None)
+    if not player:
+        emit('pick_error', {'message': 'Player not found'})
+        return
+    if player.get('team_id', 0) != 0:
+        emit('pick_error', {'message': 'Player already drafted'})
+        return
+
+    # assign player to team
+    player['team_id'] = team_id
+    with open(draft_path, "w", encoding="utf-8") as f:
+        json.dump(players, f, indent=2)
+
+    # build log entry
+    entry = {
+        "pick":    pick_num,
+        "team_id": team_id,
+        "team":    team['team_name'],
+        "player":  f"{player.get('FirstName')} {player.get('LastName')}",
+        "pos":     player.get('short_pos', ''),
+        "id":      player_id
+    }
+
+    log_path = Path("drafts") / f"{draftname}_bb_log.json"
+    append_to_log(log_path, entry)
+
+    # advance pick counter
+    meta['current_pick'] += 1
+    meta['current_team_id'] = get_next_team_id(meta)
+    save_baseball_meta(draftname, meta)
+
+    # broadcast to all clients
+    socketio.emit('pick_made', entry)
