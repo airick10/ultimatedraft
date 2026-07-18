@@ -516,6 +516,7 @@ def fb_load():
 def handle_make_pick(data):
     draftname = data['draftname']
     player_id = str(data['player_id'])
+    sport     = data.get('sport', 'bb')
 
     # load correct meta and draft file based on sport
     if sport == 'bb':
@@ -534,9 +535,16 @@ def handle_make_pick(data):
         emit('pick_error', {'message': f'Unknown sport: {sport}'})
         return
 
+    # pull state from meta
+    team_id  = meta['current_team_id']
+    team     = get_team_by_id(meta, team_id)
+    pick_num = meta['current_pick']
+
+    # load players
     with open(draft_path, "r", encoding="utf-8") as f:
         players = json.load(f)
 
+    # validate player
     player = next((p for p in players if str(p.get("id")) == player_id), None)
     if not player:
         emit('pick_error', {'message': 'Player not found'})
@@ -559,14 +567,17 @@ def handle_make_pick(data):
         "pos":     player.get('short_pos', ''),
         "id":      player_id
     }
-
-    log_path = Path("drafts") / f"{draftname}_bb_log.json"
     append_to_log(log_path, entry)
 
     # advance pick counter
     meta['current_pick'] += 1
     meta['current_team_id'] = get_next_team_id(meta)
-    save_baseball_meta(draftname, meta)
+
+    # save meta back to correct sport file
+    if sport == 'bb':
+        save_baseball_meta(draftname, meta)
+    elif sport == 'bk':
+        save_basketball_meta(draftname, meta)
 
     # broadcast to all clients
     socketio.emit('pick_made', entry)
