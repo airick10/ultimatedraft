@@ -6,17 +6,24 @@ from .services import (
     load_hitters_json,
     load_pitchers_json,
     load_basketball_json, 
-    load_football_json,
+    load_football_passing_json,
+    load_football_rushing_json,
+    load_football_receiving_json,
     initial_save_baseball_json, 
     initial_save_baseball_meta_json,
     initial_save_baseball_log_json, 
     initial_save_basketball_json, 
     initial_save_basketball_meta_json,
     initial_save_basketball_log_json,
+    initial_save_football_json, 
+    initial_save_football_meta_json,
+    initial_save_football_log_json,
     get_saved_baseball_drafts,
     load_saved_baseball_draft,
     get_saved_basketball_drafts,
     load_saved_basketball_draft,
+    get_saved_football_drafts,
+    load_saved_football_draft,
     get_team_names, 
     get_person, 
     positions, 
@@ -424,7 +431,7 @@ def bk_draft():
     log_path    = initial_save_basketball_log_json(draftname, timestamp)
 
     if not log_path.exists():
-        initial_save_baseball_log_json(draftname)
+        initial_save_basketball_log_json(draftname)
 
     with open(log_path, "r", encoding="utf-8") as f:
         draft_log = json.load(f)
@@ -460,12 +467,65 @@ def show_fb_logos():
 @main.route("/fb_confirm", methods=["POST"])
 def fb_confirm():
     num_teams = int(request.form.get("num_teams"))
-    human_teams  = request.form.getlist("human_teams")
+    human_teams = request.form.getlist("human_teams")
+    pool = request.form.get("pool")
+    cap = request.form.get("cap")
+    draftname = request.form.get("draftname")
+    selected_player_ids = request.form.getlist("selected_player_ids")
+    ai_set = request.form.getlist("ai_set")
+    confirm_stage = request.form.get("confirm_stage")
+
     num_human_teams = len(human_teams)
-    pool  = request.form.get("pool")
-    cap  = request.form.get("cap")
-    ai_set = get_team_names(num_teams - num_human_teams, "fb", human_teams)
-    return render_template("fb_confirm.html", num_teams=num_teams, human_teams=human_teams, ai_set=ai_set, pool=pool, cap=cap)
+
+    if not ai_set:
+        ai_set = get_team_names(
+            num_teams - num_human_teams,
+            "fb",
+            human_teams
+        )
+
+    # FULL: final list immediately
+    if pool == "full":
+        people = load_football("full", num_teams)
+        mode = "final_confirm"
+
+    # RANDOM: final random list immediately
+    elif pool == "random":
+        people = load_football("random", num_teams)
+        mode = "final_confirm"
+
+    # CUSTOM, first visit: show all players with checkboxes
+    elif pool == "custom" and not selected_player_ids:
+        people = load_football("custom", num_teams)
+        mode = "select_players"
+
+    # CUSTOM, second visit: user selected players, now show final list
+    elif pool == "custom" and selected_player_ids:
+        all_players = load_football("custom", num_teams)
+
+        selected_id_set = set(str(x) for x in selected_player_ids)
+
+        people = [
+            p for p in all_players
+            if str(p.get("ID")) in selected_id_set or str(p.get("id")) in selected_id_set
+        ]
+
+        mode = "final_confirm"
+
+    else:
+        raise ValueError(f"Unknown pool type: {pool}")
+
+    return render_template(
+        "fb_confirm.html",
+        num_teams=num_teams,
+        human_teams=human_teams,
+        ai_set=ai_set,
+        pool=pool,
+        draftname=draftname,
+        cap=cap,
+        players=people,
+        mode=mode
+    )
 
 @main.route("/fb_load", methods=["POST"])
 def fb_load():
@@ -509,6 +569,62 @@ def fb_load():
         log_file=str(draft_data.get("log_path", ""))
     )
 
+
+@main.route("/fb_draft", methods=["POST"])
+def fb_draft():
+    num_teams     = int(request.form.get("num_teams"))
+    human_teams   = request.form.getlist("human_teams")
+    ai_set        = request.form.getlist("ai_set")
+    pool          = request.form.get("pool")
+    cap           = request.form.get("cap")
+    draftname     = request.form.get("draftname")
+    selected_ids  = request.form.getlist("selected_player_ids")
+
+    all_players = load_football("full", num_teams)
+
+    if pool == "full":
+        people = all_players
+    else:
+        id_set = set(str(x) for x in selected_ids)
+        people = [p for p in all_players if str(p.get("id")) in id_set]
+
+    # Build a unified team list: human teams first, then AI
+    # Each entry is a dict with name + is_human flag
+    all_teams = [{"name": t, "is_human": True}  for t in human_teams] + \
+                [{"name": t, "is_human": False} for t in ai_set]
+
+    # Chunk teams into rows of 8 for the logo strip
+    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
+
+    # Roster slot labels for basketball (2 of each position)
+    roster_slots = ["QB", "QB", "RB", "RB", "FB", "TE", "TE", "WR", "WR", "WR", "WR"]
+
+    timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = initial_save_football_json(people, draftname, timestamp)
+    meta_path   = initial_save_football_meta_json(
+                      draftname, num_teams, human_teams,
+                      ai_set, pool, cap, output_path, timestamp)
+    log_path    = initial_save_football_log_json(draftname, timestamp)
+
+    if not log_path.exists():
+        initial_save_football_log_json(draftname)
+
+    with open(log_path, "r", encoding="utf-8") as f:
+        draft_log = json.load(f)
+
+    return render_template(
+        "fbdraft.html",
+        all_teams=all_teams,
+        logo_rows=logo_rows,
+        roster_slots=roster_slots,
+        pool=pool,
+        cap=cap,
+        draftname=draftname,
+        players=people,
+        draft_file=output_path,
+        draft_log=draft_log,
+        sport="fb"
+    )
 
 # ------ SOCKET IO CALLS -------
 

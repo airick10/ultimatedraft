@@ -11,7 +11,23 @@ import numpy as np
 input_file_baseball_hitters = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltimebatters.json"
 input_file_baseball_pitchers = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltimepitchers.json"
 input_file_basketball = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltimebasketball.json"
-input_file_football = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltimefootball.json"
+input_file_football_passing = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltime_football_passing.json"
+input_file_football_receiving = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltime_football_receiving.json"
+input_file_football_rushing = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltime_football_rushing.json"
+
+#---- Normanlizes Football Positions -----
+FOOTBALL_POS_MAP = {
+    'FL':  'WR',
+    'SE':  'WR',
+    'WR':  'WR',
+    'TE':  'TE',
+    'RB':  'RB',
+    'FB':  'FB',
+    'HB':  'RB',  # halfback → RB
+    'QB':  'QB',
+}
+
+
 
 def _read_json(src: str):
     if src.startswith("http://") or src.startswith("https://"):
@@ -48,8 +64,16 @@ def load_basketball_json():
     data = _read_json(input_file_basketball)  # likely a list
     return _index_by_id(data) if isinstance(data, list) else data
 
-def load_football_json():
-    data = _read_json(input_file_football)  # likely a list
+def load_football_passing_json():
+    data = _read_json(input_file_football_passing)  # likely a list
+    return _index_by_id(data) if isinstance(data, list) else data
+
+def load_football_receiving_json():
+    data = _read_json(input_file_football_receiving)  # likely a list
+    return _index_by_id(data) if isinstance(data, list) else data
+
+def load_football_rushing_json():
+    data = _read_json(input_file_football_rushing)  # likely a list
     return _index_by_id(data) if isinstance(data, list) else data
 
 
@@ -557,24 +581,210 @@ def save_basketball_meta(draftname, meta):
 
 
 
-def load_football():
-    players = load_football_json()
-
+def load_football(pool, num_teams):
+    passers   = load_football_passing_json()
+    rushers   = load_football_rushing_json()
+    receivers = load_football_receiving_json()
+    
+    seen_ids = set()  # track duplicates
     people = []
-    for _id, h in players.items():
-        pos = h.get("s_fielding", "").split("-")[0].upper()
-        if pos == "":
-            pos = "DH"
-        people.append({
-            "kind": "hitter",
-            "short_pos": pos,
-            "id": _id,                 # keep as string to match your dict keys
-            **h
-        })
+    if pool == "full" or pool == "custom":
 
-    # Sort by LastName then FirstName; missing keys fall back to ""
+        for _id, p in passers.items():
+            seen_ids.add(_id)
+            people.append({
+                "kind": "passer",
+                "short_pos": "QB",
+                "id": _id,
+                **p
+            })
+
+        for _id, h in rushers.items():
+            seen_ids.add(_id)
+            raw = h.get("Positions", "RB")
+            pos = normalize_football_pos(raw, default='RB')
+            people.append({
+                "kind": "rusher",
+                "short_pos": pos,
+                "id": _id,
+                **h
+            })
+
+        for _id, r in receivers.items():
+            if _id in seen_ids:
+                continue
+            raw = r.get("Positions", "WR")
+            pos = normalize_football_pos(raw, default='WR')
+            people.append({
+                "kind": "receiver",
+                "short_pos": pos,
+                "id": _id,
+                **r
+            })
+    else:
+        qb = []
+        rb = []
+        fb = []
+        te = []
+        wr = []
+
+        for _id, p in passers.items():
+            player = {"kind": "passer", "short_pos": "QB", "id": _id, **p}
+            pos = player["short_pos"]
+            qb.append(player)
+
+
+        for _id, h in rushers.items():
+            raw = h.get("Positions", "RB")
+            player = {"kind": "rusher", "short_pos": normalize_football_pos(raw, default='RB'), "id": _id, **h}
+            pos = player["short_pos"]
+            if pos == "RB":
+                rb.append(player)
+            else:
+                fb.append(player)
+
+        for _id, r in receivers.items():
+            raw = r.get("Positions", "WR")
+            player = {"kind": "receiver", "short_pos": normalize_football_pos(raw, default='WR'), "id": _id, **h}
+            pos = player["short_pos"]
+            if pos == "WR":
+                wr.append(player)
+            else:
+                te.append(player)
+
+
+
+        num_qb  = num_teams * 1
+        num_rb = num_teams * 2
+        num_te = num_teams * 2
+        num_wr = num_teams * 2
+
+
+        people = (
+            random.sample(qb,  min(num_qb,  len(qb)))  +
+            random.sample(rb, min(num_rb, len(rb))) +
+            random.sample(te, min(num_te, len(te))) +
+            random.sample(wr, min(num_wr, len(wr)))
+        )
+
     people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
     return people
+
+
+def initial_save_basketball_json(players, draftname, timestamp):
+    people = []
+
+    for p in players:
+        people.append({
+            **p,
+            "team_id": 0,
+            "id": p.get("id") or p.get("ID")
+        })
+
+    people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
+
+    filename = f"{draftname}_bk.json"
+
+    output_dir = Path("drafts")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = output_dir / filename
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(people, f, indent=2)
+
+    return output_path
+
+
+def initial_save_football_meta_json(
+    draftname,
+    num_teams,
+    human_teams,
+    ai_set,
+    pool,
+    cap,
+    player_file,
+    timestamp
+):
+    filename = f"{draftname}_fb_meta.json"
+
+    output_dir = Path("drafts")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = output_dir / filename
+
+    teams = []
+    team_id = 1
+
+    for team in human_teams:
+        teams.append({
+            "team_id": team_id,
+            "team_name": team,
+            "type": "human"
+        })
+        team_id += 1
+
+    for team in ai_set:
+        teams.append({
+            "team_id": team_id,
+            "team_name": team,
+            "type": "ai"
+        })
+        team_id += 1
+
+    meta = {
+        "draftname": draftname,
+        "sport": "fb",
+        "num_teams": num_teams,
+        "human_teams": len(human_teams),
+        "ai_teams": len(ai_set),
+        "pool": pool,
+        "cap": cap,
+        "player_file": str(player_file),
+        "current_pick": 1,
+        "current_team_id": 1,
+        "teams": teams
+    }
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+
+    return output_path
+
+
+def initial_save_football_log_json(draftname, timestamp):
+    filename = f"{draftname}_fb_log.json"
+
+    output_dir = Path("drafts")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = output_dir / filename
+
+    log = []
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(log, f, indent=2)
+
+    return output_path
+
+
+def get_saved_football_drafts():
+    draft_dir = Path("drafts")
+    saved_drafts = []
+
+    if not draft_dir.exists():
+        return saved_drafts
+
+    for file_path in sorted(draft_dir.glob("*_fb_*.json")):
+        name = file_path.name
+
+        if "_meta_" in name or "_log_" in name:
+            continue
+
+        saved_drafts.append(name)
+
+    saved_drafts.sort(reverse=True)
+    return saved_drafts
 
 
 def load_saved_football_draft(filename):
@@ -618,6 +828,47 @@ def load_saved_football_draft(filename):
         "timestamp": timestamp,
     }
 
+def initial_save_football_json(players, draftname, timestamp):
+    people = []
+
+    for p in players:
+        people.append({
+            **p,
+            "team_id": 0,
+            "id": p.get("id") or p.get("ID")
+        })
+
+    people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
+
+    filename = f"{draftname}_fb.json"
+
+    output_dir = Path("drafts")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = output_dir / filename
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(people, f, indent=2)
+
+    return output_path
+
+
+def load_football_meta(draftname):
+    path = Path("drafts") / f"{draftname}_fb_meta.json"
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_football_meta(draftname, meta):
+    path = Path("drafts") / f"{draftname}_fb_meta.json"
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+
+
+def normalize_football_pos(raw_pos, default='WR'):
+    # take first token — "FL SE" → "FL"
+    first = raw_pos.strip().split()[0].upper()
+    return FOOTBALL_POS_MAP.get(first, default)
+
 # -------- MISC -----------------------------------------------------
 
 
@@ -644,7 +895,10 @@ def get_team_names(num_teams, sport, human_team_name):
         available = bb_names[~np.isin(bb_names, human_team_name)]
         return np.random.choice(available, size=num_teams, replace=False)
     else:
-        fb_names = np.array(["Warriors"])
+        fb_names = np.array(["Admirals", "Aeros", "Aztecs", "Badgers", "Blaze", "Bruisers", "Cossacks", "Cougars",
+            "Cruisers", "Dukes", "Generals", "Gladitors", "Hawks", "Hilltoppers", "Ironclads", "Jackrabbits", "Lunar Cats",
+            "Miners", "Orcas", "Pilots", "Polar Bears", "Rebels", "Roadsters", "Sabers", "Samurai", "Seals", "Settlers",
+            "Sharks", "Storm", "Thunder", "Truckers", "Vultures"])
         if not human_team_name:
             return fb_names
         available = fb_names[~np.isin(fb_names, human_team_name)]
