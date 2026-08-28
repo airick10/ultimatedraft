@@ -14,9 +14,13 @@ input_file_basketball = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltim
 input_file_football_passing = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltime_football_passing.json"
 input_file_football_receiving = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltime_football_receiving.json"
 input_file_football_rushing = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltime_football_rushing.json"
+input_file_football_def_ol = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltime_football_def_ol.json"
+input_file_football_special = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltime_football_special.json"
 
 #---- Normanlizes Football Positions -----
 FOOTBALL_POS_MAP = {
+    'KP':  'KP',
+    'DO':  'DO',
     'FL':  'WR',
     'SE':  'WR',
     'WR':  'WR',
@@ -68,12 +72,20 @@ def load_football_passing_json():
     data = _read_json(input_file_football_passing)  # likely a list
     return _index_by_id(data) if isinstance(data, list) else data
 
+def load_football_rushing_json():
+    data = _read_json(input_file_football_rushing)  # likely a list
+    return _index_by_id(data) if isinstance(data, list) else data
+
 def load_football_receiving_json():
     data = _read_json(input_file_football_receiving)  # likely a list
     return _index_by_id(data) if isinstance(data, list) else data
 
-def load_football_rushing_json():
-    data = _read_json(input_file_football_rushing)  # likely a list
+def load_football_def_ol_json():
+    data = _read_json(input_file_football_def_ol)  # likely a list
+    return _index_by_id(data) if isinstance(data, list) else data
+
+def load_football_special_json():
+    data = _read_json(input_file_football_special)  # likely a list
     return _index_by_id(data) if isinstance(data, list) else data
 
 
@@ -568,6 +580,8 @@ def load_football(pool, num_teams):
     passers   = load_football_passing_json()
     rushers   = load_football_rushing_json()
     receivers = load_football_receiving_json()
+    defoff   = load_football_def_ol_json()
+    special = load_football_special_json()
 
     seen_ids = set()
     people   = []
@@ -605,12 +619,40 @@ def load_football(pool, num_teams):
                 "id":        uid,
                 **r
             })
+        for _id, d in defoff.items():
+            uid = f"do_{_id}"
+            if uid in seen_ids:
+                continue
+            raw = d.get("Positions", "DO")
+            pos = normalize_football_pos(raw, default='DO')
+            people.append({
+                "kind":      "dlineoline",
+                "name": f"{d.get('Year','')} {d.get('Team','')} {d.get('Positions','')}",
+                "short_pos": pos,
+                "id":        uid,
+                **d
+            })
+        for _id, k in special.items():
+            uid = f"kp_{_id}"
+            if uid in seen_ids:
+                continue
+            raw = k.get("Positions", "KP")
+            pos = normalize_football_pos(raw, default='KP')
+            people.append({
+                "kind":      "special",
+                "name": f"{k.get('Year','')} {k.get('Team','')} {k.get('Positions','')}",
+                "short_pos": pos,
+                "id":        uid,
+                **k
+            })
     else:
         qb = []
         hb = []
         fb = []
         te = []
         wr = []
+        do = []
+        kp = []
 
         for _id, p in passers.items():
             uid = f"qb_{_id}"
@@ -624,7 +666,7 @@ def load_football(pool, num_teams):
             raw = h.get("Positions", "HB")
             player = {"kind": "rusher", "short_pos": normalize_football_pos(raw, default='HB'), "id": uid, **h}
             pos = player["short_pos"]
-            if pos == "HB":  rb.append(player)
+            if pos == "HB":  hb.append(player)
             else:            fb.append(player)
 
         for _id, r in receivers.items():
@@ -637,23 +679,39 @@ def load_football(pool, num_teams):
             if pos == "WR":  wr.append(player)
             else:            te.append(player)
 
+        for _id, d in defoff.items():
+            uid = f"do_{_id}"
+            seen_ids.add(uid)
+            player = {"kind": "dlineoline", "name": f"{d.get('Year','')} {d.get('Team','')} {d.get('Positions','')}", "short_pos": "DO", "id": uid, **d}
+            do.append(player)
+
+        for _id, k in special.items():
+            uid = f"kp_{_id}"
+            seen_ids.add(uid)
+            player = {"kind": "special", "name": f"{k.get('Year','')} {k.get('Team','')} {k.get('Positions','')}", "short_pos": "KP", "id": uid, **k}
+            kp.append(player)
+
         num_qb = num_teams * 1
         num_hb = num_teams * 2
         num_te = num_teams * 2
         num_wr = num_teams * 2
+        num_do = num_teams * 2
+        num_kp = num_teams * 2
 
         people = (
             random.sample(qb, min(num_qb, len(qb))) +
             random.sample(hb, min(num_hb, len(hb))) +
             random.sample(te, min(num_te, len(te))) +
-            random.sample(wr, min(num_wr, len(wr)))
+            random.sample(wr, min(num_wr, len(wr))) +
+            random.sample(do, min(num_do, len(do))) +
+            random.sample(kp, min(num_kp, len(kp)))
         )
 
     people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
     return people
 
 
-def initial_save_basketball_json(players, draftname, timestamp):
+def initial_save_football_json(players, draftname, timestamp):
     people = []
 
     for p in players:
