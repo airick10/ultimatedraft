@@ -6,7 +6,7 @@
   <style>
     body {
       background-color: #d4f0e1;
-      background-image: url("{{ url_for('static', filename='bk_back.jpg') }}");
+      background-image: url("{{ url_for('static', filename='foot_back.jpg') }}");
       background-size: cover;
       background-repeat: no-repeat;
       background-attachment: fixed;
@@ -82,7 +82,7 @@ function validateSelections() {
     const teOk = teCount === required.TE;
     const wrOk = wrCount === required.WR;
 
-    document.getElementById('submit-btn').disabled = !(qbOk && rbOk && teOk && wrOK);
+    document.getElementById('submit-btn').disabled = !(qbOk && rbOk && teOk && wrOk);
 
     document.getElementById('qb-count').textContent = `${qbCount} / ${required.QB}`;
     document.getElementById('rb-count').textContent = `${rbCount} / ${required.RB}`;
@@ -196,7 +196,7 @@ document.addEventListener('DOMContentLoaded', validateSelections);
         <br><br>
 
         {% for p in players %}
-            {% if p.get('Pos','') == "QB" %}
+            {% if p.get('short_pos','') == "QB" %}
                 <input 
                     type="checkbox" 
                     class="pos-QB" 
@@ -229,7 +229,7 @@ document.addEventListener('DOMContentLoaded', validateSelections);
           <br><br>
 
           {% for p in players %}
-              {% if p.get('Pos','') == "HB" %}
+              {% if p.get('short_pos','') == "HB" %}
                   <input 
                       type="checkbox" 
                       class="pos-HB" 
@@ -262,7 +262,7 @@ document.addEventListener('DOMContentLoaded', validateSelections);
           <br><br>
 
           {% for p in players %}
-              {% if p.get('Pos','') == "G" %}
+              {% if p.get('short_pos','') == "TE" %}
                   <input 
                       type="checkbox" 
                       class="pos-TE" 
@@ -295,7 +295,7 @@ document.addEventListener('DOMContentLoaded', validateSelections);
           <br><br>
 
           {% for p in players %}
-              {% if p.get('Pos','') == "G" %}
+              {% if p.get('short_pos','') == "WR" %}
                   <input 
                       type="checkbox" 
                       class="pos-WR" 

@@ -413,7 +413,7 @@ function filterPos(btn, pos) {
     btn.classList.add('active');
 
     const isPasser   = (pos === 'QB');
-    const isRusher   = (pos === 'RB' || pos === 'FB');
+    const isRusher   = (pos === 'HB' || pos === 'FB');
     const isReceiver = (pos === 'TE' || pos === 'WR');
     const isAll      = (pos === 'ALL');
 
@@ -484,7 +484,7 @@ function showRoster(teamName) {
         <div class="pos-filter">
             <button class="btn-pos active" onclick="filterPos(this,'ALL')">All</button>
             <button class="btn-pos" onclick="filterPos(this,'QB')">QB</button>
-            <button class="btn-pos" onclick="filterPos(this,'RB')">RB</button>
+            <button class="btn-pos" onclick="filterPos(this,'HB')">HB</button>
             <button class="btn-pos" onclick="filterPos(this,'FB')">FB</button>
             <button class="btn-pos" onclick="filterPos(this,'TE')">TE</button>
             <button class="btn-pos" onclick="filterPos(this,'WR')">WR</button>
@@ -588,7 +588,7 @@ function showRoster(teamName) {
     btn.classList.add('active');
 
     const isPasser   = (pos === 'QB');
-    const isRusher   = (pos === 'RB' || pos === 'FB');
+    const isRusher   = (pos === 'HB' || pos === 'HB');
     const isReceiver = (pos === 'TE' || pos === 'WR');
     const isAll      = (pos === 'ALL');
 
