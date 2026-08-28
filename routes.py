@@ -515,6 +515,10 @@ def fb_confirm():
     else:
         raise ValueError(f"Unknown pool type: {pool}")
 
+    from collections import Counter
+    pos_counts = Counter(p.get('short_pos','') for p in people)
+    print(pos_counts)
+
     return render_template(
         "fb_confirm.html",
         num_teams=num_teams,

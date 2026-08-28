@@ -21,9 +21,9 @@ FOOTBALL_POS_MAP = {
     'SE':  'WR',
     'WR':  'WR',
     'TE':  'TE',
-    'RB':  'RB',
+    'RB':  'HB',
     'FB':  'FB',
-    'HB':  'RB',  # halfback → RB
+    'HB':  'HB',  # halfback → RB
     'QB':  'QB',
 }
 
@@ -79,70 +79,54 @@ def load_football_rushing_json():
 
 def load_baseball(pool, num_teams):
     """Combine hitters and pitchers into a single sorted LIST."""
-    hitters = load_hitters_json()
+    hitters  = load_hitters_json()
     pitchers = load_pitchers_json()
+
     if pool == "full" or pool == "custom":
         people = []
         for _id, h in hitters.items():
-            #pos = h.get("s_fielding", "").split("-")[0].upper()
-            #if pos == "":
-                #pos = "DH"
             people.append({
-                "kind": "hitter",
+                "kind":      "hitter",
                 "short_pos": compute_short_pos("hitter", h),
-                "id": _id,                 # keep as string to match your dict keys
+                "id":        f"h_{_id}",
                 **h
             })
         for _id, p in pitchers.items():
-            #pos = p.get("s_endurance", "").split("(")[0].strip().upper()
-            #pos = pos+"P"
             people.append({
-                "kind": "pitcher",
+                "kind":      "pitcher",
                 "short_pos": compute_short_pos("pitcher", p),
-                "id": _id,
+                "id":        f"p_{_id}",
                 **p
             })
     else:
-        c = []
+        c     = []
         fbase = []
         sbase = []
         tbase = []
-        ss = []
-        lf = []
-        cf = []
-        rf = []
-        sp = []
-        rp = []
-
+        ss    = []
+        lf    = []
+        cf    = []
+        rf    = []
+        sp    = []
+        rp    = []
 
         for _id, h in hitters.items():
-            player = {"kind": "hitter", "short_pos": compute_short_pos("hitter", h), "id": _id, **h}
+            player = {"kind": "hitter", "short_pos": compute_short_pos("hitter", h), "id": f"h_{_id}", **h}
             pos = player["short_pos"]
-            if pos == "C":
-                c.append(player)
-            elif pos == "1B":
-                fbase.append(player)
-            elif pos == "2B":
-                sbase.append(player)
-            elif pos == "3B":
-                tbase.append(player)
-            elif pos == "SS":
-                ss.append(player)
-            elif pos == "LF":
-                lf.append(player)
-            elif pos == "CF":
-                cf.append(player)
-            elif pos == "RF":
-                rf.append(player)
+            if pos == "C":     c.append(player)
+            elif pos == "1B":  fbase.append(player)
+            elif pos == "2B":  sbase.append(player)
+            elif pos == "3B":  tbase.append(player)
+            elif pos == "SS":  ss.append(player)
+            elif pos == "LF":  lf.append(player)
+            elif pos == "CF":  cf.append(player)
+            elif pos == "RF":  rf.append(player)
 
         for _id, p in pitchers.items():
-            player = {"kind": "pitcher", "short_pos": compute_short_pos("pitcher", p), "id": _id, **p}
+            player = {"kind": "pitcher", "short_pos": compute_short_pos("pitcher", p), "id": f"p_{_id}", **p}
             pos = player["short_pos"]
-            if pos == "SP":
-                sp.append(player)
-            else:
-                rp.append(player)
-
+            if pos == "SP":  sp.append(player)
+            else:            rp.append(player)
 
         num_c  = num_teams * 2
         num_1b = num_teams * 2
@@ -156,19 +140,18 @@ def load_baseball(pool, num_teams):
         num_rp = num_teams * 7
 
         people = (
-            random.sample(c,  min(num_c,  len(c)))  +
+            random.sample(c,     min(num_c,  len(c)))     +
             random.sample(fbase, min(num_1b, len(fbase))) +
             random.sample(sbase, min(num_2b, len(sbase))) +
-            random.sample(ss, min(num_ss, len(ss))) +
+            random.sample(ss,    min(num_ss, len(ss)))    +
             random.sample(tbase, min(num_3b, len(tbase))) +
-            random.sample(lf, min(num_lf, len(lf))) +
-            random.sample(cf, min(num_cf, len(cf))) +
-            random.sample(rf, min(num_rf, len(rf))) +
-            random.sample(sp, min(num_sp, len(sp))) +
-            random.sample(rp,   min(num_rp,   len(rp)))
+            random.sample(lf,    min(num_lf, len(lf)))    +
+            random.sample(cf,    min(num_cf, len(cf)))    +
+            random.sample(rf,    min(num_rf, len(rf)))    +
+            random.sample(sp,    min(num_sp, len(sp)))    +
+            random.sample(rp,    min(num_rp, len(rp)))
         )
 
-    # Sort by LastName then FirstName; missing keys fall back to ""
     people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
     return people
 
@@ -585,84 +568,83 @@ def load_football(pool, num_teams):
     passers   = load_football_passing_json()
     rushers   = load_football_rushing_json()
     receivers = load_football_receiving_json()
-    
-    seen_ids = set()  # track duplicates
-    people = []
-    if pool == "full" or pool == "custom":
 
+    seen_ids = set()
+    people   = []
+
+    if pool == "full" or pool == "custom":
         for _id, p in passers.items():
-            seen_ids.add(_id)
+            uid = f"qb_{_id}"
+            seen_ids.add(uid)
             people.append({
-                "kind": "passer",
+                "kind":      "passer",
                 "short_pos": "QB",
-                "id": _id,
+                "id":        uid,
                 **p
             })
-
         for _id, h in rushers.items():
-            seen_ids.add(_id)
-            raw = h.get("Positions", "RB")
-            pos = normalize_football_pos(raw, default='RB')
+            uid = f"hb_{_id}"
+            seen_ids.add(uid)
+            raw = h.get("Positions", "HB")
+            pos = normalize_football_pos(raw, default='HB')
             people.append({
-                "kind": "rusher",
+                "kind":      "rusher",
                 "short_pos": pos,
-                "id": _id,
+                "id":        uid,
                 **h
             })
-
         for _id, r in receivers.items():
-            if _id in seen_ids:
+            uid = f"wr_{_id}"
+            if uid in seen_ids:
                 continue
             raw = r.get("Positions", "WR")
             pos = normalize_football_pos(raw, default='WR')
             people.append({
-                "kind": "receiver",
+                "kind":      "receiver",
                 "short_pos": pos,
-                "id": _id,
+                "id":        uid,
                 **r
             })
     else:
         qb = []
-        rb = []
+        hb = []
         fb = []
         te = []
         wr = []
 
         for _id, p in passers.items():
-            player = {"kind": "passer", "short_pos": "QB", "id": _id, **p}
-            pos = player["short_pos"]
+            uid = f"qb_{_id}"
+            seen_ids.add(uid)
+            player = {"kind": "passer", "short_pos": "QB", "id": uid, **p}
             qb.append(player)
 
-
         for _id, h in rushers.items():
-            raw = h.get("Positions", "RB")
-            player = {"kind": "rusher", "short_pos": normalize_football_pos(raw, default='RB'), "id": _id, **h}
+            uid = f"hb_{_id}"
+            seen_ids.add(uid)
+            raw = h.get("Positions", "HB")
+            player = {"kind": "rusher", "short_pos": normalize_football_pos(raw, default='HB'), "id": uid, **h}
             pos = player["short_pos"]
-            if pos == "RB":
-                rb.append(player)
-            else:
-                fb.append(player)
+            if pos == "HB":  rb.append(player)
+            else:            fb.append(player)
 
         for _id, r in receivers.items():
+            uid = f"wr_{_id}"
+            if uid in seen_ids:
+                continue
             raw = r.get("Positions", "WR")
-            player = {"kind": "receiver", "short_pos": normalize_football_pos(raw, default='WR'), "id": _id, **h}
+            player = {"kind": "receiver", "short_pos": normalize_football_pos(raw, default='WR'), "id": uid, **r}
             pos = player["short_pos"]
-            if pos == "WR":
-                wr.append(player)
-            else:
-                te.append(player)
+            if pos == "WR":  wr.append(player)
+            else:            te.append(player)
 
-
-
-        num_qb  = num_teams * 1
-        num_rb = num_teams * 2
+        num_qb = num_teams * 1
+        num_hb = num_teams * 2
         num_te = num_teams * 2
         num_wr = num_teams * 2
 
-
         people = (
-            random.sample(qb,  min(num_qb,  len(qb)))  +
-            random.sample(rb, min(num_rb, len(rb))) +
+            random.sample(qb, min(num_qb, len(qb))) +
+            random.sample(hb, min(num_hb, len(hb))) +
             random.sample(te, min(num_te, len(te))) +
             random.sample(wr, min(num_wr, len(wr)))
         )
