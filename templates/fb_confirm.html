@@ -66,28 +66,36 @@
 const numTeams = {{ num_teams }};
 const required = {
     QB: numTeams * 1,
-    RB: numTeams * 2,
+    HB: numTeams * 2,
     TE: numTeams * 2,
-    WR: numTeams * 2
+    WR: numTeams * 2,
+    DO: numTeams * 2,
+    KP: numTeams * 2
 };
 
 function validateSelections() {
     const qbCount = document.querySelectorAll('input.pos-QB:checked').length;
-    const rbCount = document.querySelectorAll('input.pos-RB:checked').length;
+    const hbCount = document.querySelectorAll('input.pos-HB:checked').length;
     const teCount = document.querySelectorAll('input.pos-TE:checked').length;
     const wrCount = document.querySelectorAll('input.pos-WR:checked').length;
+    const doCount = document.querySelectorAll('input.pos-DO:checked').length;
+    const kpCount = document.querySelectorAll('input.pos-KP:checked').length;
 
     const qbOk = qbCount === required.QB;
-    const rbOk = rbCount === required.RB;
+    const hbOk = hbCount === required.HB;
     const teOk = teCount === required.TE;
     const wrOk = wrCount === required.WR;
+    const doOk = doCount === required.DO;
+    const kpOk = kpCount === required.KP;
 
-    document.getElementById('submit-btn').disabled = !(qbOk && rbOk && teOk && wrOk);
+    document.getElementById('submit-btn').disabled = !(qbOk && hbOk && teOk && wrOk && doOK && kpOK);
 
     document.getElementById('qb-count').textContent = `${qbCount} / ${required.QB}`;
-    document.getElementById('rb-count').textContent = `${rbCount} / ${required.RB}`;
+    document.getElementById('hb-count').textContent = `${hbCount} / ${required.HB}`;
     document.getElementById('te-count').textContent = `${teCount} / ${required.TE}`;
     document.getElementById('wr-count').textContent = `${wrCount} / ${required.WR}`;
+    document.getElementById('do-count').textContent = `${doCount} / ${required.DO}`;
+    document.getElementById('kp-count').textContent = `${kpCount} / ${required.KP}`;
 }
 
 function setPositionCheckboxes(positionClass, checked) {
@@ -141,8 +149,12 @@ document.addEventListener('DOMContentLoaded', validateSelections);
       {% endfor %}
 
       {% for p in players %}
-        <input type="hidden" name="selected_player_ids" value="{{ p.get('ID') or p.get('id') }}">
-        {{ p.get('FirstName','') }} {{ p.get('LastName','') }}<br>
+        <input type="hidden" name="selected_player_ids" value="{{ p.get('id') or p.get('id') }}">
+        {% if p.get('name') %}
+          {{ p.get('name','') }}
+        {% else %}
+          {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
+        {% endif %}<br>
       {% endfor %}
 
       <hr>
@@ -200,12 +212,12 @@ document.addEventListener('DOMContentLoaded', validateSelections);
                 <input 
                     type="checkbox" 
                     class="pos-QB" 
-                    id="player-{{ p.get('ID','') }}" 
+                    id="player-{{ p.get('id','') }}" 
                     name="selected_player_ids" 
-                    value="{{ p.get('ID','') }}" 
+                    value="{{ p.get('id','') }}" 
                     onchange="validateSelections()"
                 >
-                <label for="player-{{ p.get('ID','') }}">
+                <label for="player-{{ p.get('id','') }}">
                     {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
                 </label><br>
             {% endif %}
@@ -215,14 +227,14 @@ document.addEventListener('DOMContentLoaded', validateSelections);
       <div class="col">
           <h3>
               Rushers
-              <span id="rb-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
+              <span id="hb-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
           </h3>
 
-          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-RB', true)">
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-HB', true)">
               Check All Rushers
           </button>
 
-          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-RB', false)">
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-HB', false)">
               Reset Rushers
           </button>
 
@@ -233,12 +245,12 @@ document.addEventListener('DOMContentLoaded', validateSelections);
                   <input 
                       type="checkbox" 
                       class="pos-HB" 
-                      id="player-{{ p.get('ID','') }}" 
+                      id="player-{{ p.get('id','') }}" 
                       name="selected_player_ids" 
-                      value="{{ p.get('ID','') }}" 
+                      value="{{ p.get('id','') }}" 
                       onchange="validateSelections()"
                   >
-                  <label for="player-{{ p.get('ID','') }}">
+                  <label for="player-{{ p.get('id','') }}">
                       {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
                   </label><br>
               {% endif %}
@@ -266,12 +278,12 @@ document.addEventListener('DOMContentLoaded', validateSelections);
                   <input 
                       type="checkbox" 
                       class="pos-TE" 
-                      id="player-{{ p.get('ID','') }}" 
+                      id="player-{{ p.get('id','') }}" 
                       name="selected_player_ids" 
-                      value="{{ p.get('ID','') }}" 
+                      value="{{ p.get('id','') }}" 
                       onchange="validateSelections()"
                   >
-                  <label for="player-{{ p.get('ID','') }}">
+                  <label for="player-{{ p.get('id','') }}">
                       {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
                   </label><br>
               {% endif %}
@@ -299,17 +311,92 @@ document.addEventListener('DOMContentLoaded', validateSelections);
                   <input 
                       type="checkbox" 
                       class="pos-WR" 
-                      id="player-{{ p.get('ID','') }}" 
+                      id="player-{{ p.get('id','') }}" 
                       name="selected_player_ids" 
-                      value="{{ p.get('ID','') }}" 
+                      value="{{ p.get('id','') }}" 
                       onchange="validateSelections()"
                   >
-                  <label for="player-{{ p.get('ID','') }}">
+                  <label for="player-{{ p.get('id','') }}">
                       {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
                   </label><br>
               {% endif %}
           {% endfor %}
     </div>
+
+
+    <div class="col">
+          <h3>
+              Defense/OLine 
+              <span id="do-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-DO', true)">
+              Check All DefOLine
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-DO', false)">
+              Reset DefOline
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('short_pos','') == "DO" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-DO" 
+                      id="player-{{ p.get('id','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('id','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('id','') }}">
+                      {{ p.get('name','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+
+<div class="col">
+          <h3>
+              Special 
+              <span id="kp-count" class="text-warning">0 / {{ num_teams * 2 }}</span>
+          </h3>
+
+          <button type="button" class="btn btn-sm btn-primary" onclick="setPositionCheckboxes('pos-KP', true)">
+              Check All Special
+          </button>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="setPositionCheckboxes('pos-KP', false)">
+              Reset Special
+          </button>
+
+          <br><br>
+
+          {% for p in players %}
+              {% if p.get('short_pos','') == "KP" %}
+                  <input 
+                      type="checkbox" 
+                      class="pos-KP" 
+                      id="player-{{ p.get('id','') }}" 
+                      name="selected_player_ids" 
+                      value="{{ p.get('id','') }}" 
+                      onchange="validateSelections()"
+                  >
+                  <label for="player-{{ p.get('id','') }}">
+                      {{ p.get('name','') }}
+                  </label><br>
+              {% endif %}
+          {% endfor %}
+    </div>
+
+
+
+
+
+
+
 
 
     </div>
