@@ -68,7 +68,7 @@ body::before {
 .logo-wrap.active .team-label { color:#39ff14; }
 
 /* ── Main 3-pane row ── */
-.draft-body { display:flex; height:calc(100vh - 120px); overflow:hidden; }
+.draft-body { display:flex; height:calc(100vh - 155px); overflow:hidden; }
 
 /* ── Left pane ── */
 .pane-left {
@@ -289,6 +289,34 @@ body::before {
 }
 .slot-player { color:#888; font-style:italic; }
 .slot-player.filled { color:#e0e0e0; font-style:normal; }
+.log-entry {
+    color: #e0e0e0;
+    font-size: .72rem;
+    padding: 2px 0;
+}
+
+.draft-ticker {
+    background: #111;
+    border-bottom: 2px solid #c9a84c;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.ticker-announcement {
+    font-size: .8rem;
+    color: #e0e0e0;
+    font-style: italic;
+}
+.ticker-timer {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #39ff14;
+    letter-spacing: .05em;
+    min-width: 50px;
+    text-align: right;
+}
+.ticker-timer.warning { color: #ff4444; }
 </style>
 {% endblock %}
 
@@ -299,6 +327,8 @@ const currentDraftname = "{{ draftname }}";
 const currentSport = "{{ sport }}";
 let selectedPlayerId = null;
 let sortDir = {};
+let pickTimer = null;
+let timeLeft  = 0;
 
 // ── SocketIO connection ──
 socket.on('connect', () => {
@@ -319,6 +349,7 @@ function draftPlayer() {
     });
 }
 
+// ── Receive pick from server ──
 // ── Receive pick from server ──
 socket.on('pick_made', (entry) => {
     console.log('Pick made:', entry);
@@ -341,8 +372,64 @@ socket.on('pick_made', (entry) => {
         const el = document.createElement('div');
         el.className = 'log-entry';
         el.textContent = `${entry.pick}. ${entry.team} — ${entry.pos} ${entry.player}`;
-        logDiv.prepend(el);
+        logDiv.appendChild(el);
     }
+
+    // update roster slot for the team that just picked
+    const teamRoster = document.getElementById(`roster-${entry.team}`);
+    if (teamRoster) {
+        const slots = teamRoster.querySelectorAll('.t-pick');
+        for (let slot of slots) {
+            if (slot.textContent.includes('—')) {
+                slot.textContent = `${entry.pos}: ${entry.player}`;
+                slot.classList.add('filled');
+                break;
+            }
+        }
+    }
+
+    // switch roster dropdown to next picking team
+    const select = document.getElementById('rosterSelect');
+    if (select && entry.next_team) {
+        select.value = entry.next_team;
+        showRoster(entry.next_team);
+    }
+
+    // update on-the-clock display
+    const clockEl = document.getElementById('clockTeam');
+    if (clockEl) clockEl.textContent = entry.next_team;
+
+    // set active team logo
+    setActiveLogo(entry.next_team);
+
+    // announce last pick
+    const announcement = document.getElementById('tickerAnnouncement');
+    if (announcement) {
+        announcement.textContent = `${entry.team} select ${entry.pos} — ${entry.player}`;
+    }
+
+    // start timer based on next team type
+    const isHuman = entry.next_team_type === 'human';
+    startTimer(isHuman ? 120 : 15);
+});
+
+socket.on('pick_skipped', (data) => {
+    const announcement = document.getElementById('tickerAnnouncement');
+    if (announcement) announcement.textContent = 'Pick skipped — clock expired';
+
+    const select = document.getElementById('rosterSelect');
+    if (select && data.next_team) {
+        select.value = data.next_team;
+        showRoster(data.next_team);
+    }
+
+    const clockEl = document.getElementById('clockTeam');
+    if (clockEl) clockEl.textContent = data.next_team;
+
+    setActiveLogo(data.next_team);
+
+    const isHuman = data.next_team_type === 'human';
+    startTimer(isHuman ? 120 : 15);
 });
 
 socket.on('pick_error', (data) => {
@@ -355,6 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // show first team roster on load
     const first = document.querySelector('.roster-team');
     if (first) first.style.display = 'block';
+    setActiveLogo("{{ all_teams[0].name }}");  // or pass current_team from route
 
     // player row click handler
     document.querySelectorAll('#playerBody tr').forEach(row => {
@@ -374,6 +462,10 @@ document.addEventListener('DOMContentLoaded', () => {
             row.classList.add('selected-row');
         });
     });
+
+    // start timer for first pick
+    const firstTeamType = "{{ all_teams[0].is_human | lower }}";
+    startTimer(firstTeamType === 'true' ? 120 : 15);
 });
 
 // ── Sort table ──
@@ -416,6 +508,51 @@ function showRoster(teamName) {
     document.querySelectorAll('.roster-team').forEach(el => el.style.display = 'none');
     document.getElementById(`roster-${teamName}`).style.display = 'block';
 }
+
+// -- Highlighting Current Drafting Team --
+function setActiveLogo(teamName) {
+    document.querySelectorAll('.logo-wrap').forEach(el => {
+        el.classList.remove('active');
+    });
+    const active = document.querySelector(`.logo-wrap[data-team="${teamName}"]`);
+    if (active) active.classList.add('active');
+}
+
+function startTimer(seconds) {
+    clearInterval(pickTimer);
+    timeLeft = seconds;
+    updateTimerDisplay();
+    pickTimer = setInterval(() => {
+        timeLeft--;
+        updateTimerDisplay();
+        if (timeLeft <= 0) {
+            clearInterval(pickTimer);
+            skipPick();
+        }
+    }, 1000);
+}
+
+function updateTimerDisplay() {
+    const el = document.getElementById('tickerTimer');
+    if (!el) return;
+    const mins = Math.floor(timeLeft / 60);
+    const secs = timeLeft % 60;
+    el.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    // go red under 30 seconds
+    if (timeLeft <= 30) {
+        el.classList.add('warning');
+    } else {
+        el.classList.remove('warning');
+    }
+}
+
+function skipPick() {
+    console.log('Timer expired — skipping pick');
+    socket.emit('skip_pick', {
+        draftname: currentDraftname,
+        sport:     currentSport
+    });
+}
 </script>
 {% endblock %}
 
@@ -441,16 +578,25 @@ function showRoster(teamName) {
 </div>
 {% endfor %}
 
+<!-- Draft Ticker -->
+<div class="draft-ticker">
+    <div class="ticker-announcement" id="tickerAnnouncement">Draft starting...</div>
+    <div class="ticker-timer" id="tickerTimer">2:00</div>
+</div>
+
 <div class="draft-body">
 
   <!-- Left: rosters with dropdown -->
   <div class="pane-left">
     <h6>Draft Log</h6>
-    {% for entry in draft_log %}
-    <div class="log-entry">{{ entry }}</div>
-    {% else %}
-    <div class="log-empty" style="color:#555; font-size:.72rem; font-style:italic;">No picks yet</div>
-    {% endfor %}
+    <div id="draftLog">
+        <!-- ***COMMENT*** Add '| reverse' (without quotes) after draft_log if you want reverse order -->
+        {% for entry in draft_log %}
+        <div class="log-entry">{{ entry.pick }}. {{ entry.team }} — {{ entry.pos }} {{ entry.player }}</div>
+        {% else %}
+        <div class="log-empty">No picks yet</div>
+        {% endfor %}
+    </div>
 </div>
 
   <!-- Center: player pool -->
@@ -508,13 +654,32 @@ function showRoster(teamName) {
   <div class="pane-right">
     <h6>On the Clock</h6>
     <div class="on-clock" id="clockTeam">{{ all_teams[0].name }}</div>
-    {% for slot in roster_slots %}
-    <div class="slot-row">
-      <span class="slot-label">{{ slot }}</span>
-      <span class="slot-player" id="slot-{{ loop.index0 }}">—</span>
+
+    <select id="rosterSelect" onchange="showRoster(this.value)" class="roster-select">
+        {% for team in all_teams %}
+        <option value="{{ team.name }}">{{ team.name }}</option>
+        {% endfor %}
+    </select>
+
+    {% for team in all_teams %}
+    <div class="roster-team" id="roster-{{ team.name }}" style="display:none">
+        <div class="t-name">{{ team.name }}</div>
+        {% set team_picks = rosters.get(loop.index, []) %}
+        {% for slot in roster_slots %}
+        {% if loop.index0 < team_picks|length %}
+        {% set pick = team_picks[loop.index0] %}
+        <div class="t-pick filled" id="slot-{{ team.name }}-{{ loop.index0 }}">
+            {{ pick.pos }}: {{ pick.player }}
+        </div>
+        {% else %}
+        <div class="t-pick" id="slot-{{ team.name }}-{{ loop.index0 }}">
+            {{ slot }}: —
+        </div>
+        {% endif %}
+        {% endfor %}
     </div>
     {% endfor %}
-  </div>
+</div>
 
 </div>
 
