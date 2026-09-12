@@ -180,7 +180,7 @@ def load_saved_baseball_draft(filename):
     if "_bb_" not in stem:
         raise ValueError(f"Not a baseball draft file: {filename}")
 
-    draftname, timestamp = stem.split("_bb", 1)
+    draftname = stem.split("_bb")[0]
 
     meta_path = draft_dir / f"{draftname}_bb_meta.json"
     log_path = draft_dir / f"{draftname}_bb_log.json"
@@ -205,11 +205,10 @@ def load_saved_baseball_draft(filename):
         "player_path": player_path,
         "meta_path": meta_path,
         "log_path": log_path,
-        "draftname": draftname,
-        "timestamp": timestamp,
+        "draftname": draftname
     }
 
-def initial_save_baseball_json(players, draftname, timestamp):
+def initial_save_baseball_json(players, draftname):
     people = []
 
     for p in players:
@@ -241,8 +240,7 @@ def initial_save_baseball_meta_json(
     ai_set,
     pool,
     cap,
-    player_file,
-    timestamp
+    player_file
 ):
     filename = f"{draftname}_bb_meta.json"
 
@@ -290,7 +288,7 @@ def initial_save_baseball_meta_json(
     return output_path
 
 
-def initial_save_baseball_log_json(draftname, timestamp):
+def initial_save_baseball_log_json(draftname):
     filename = f"{draftname}_bb_log.json"
 
     output_dir = Path("drafts")
@@ -404,7 +402,7 @@ from pathlib import Path
 import json
 
 
-def initial_save_basketball_json(players, draftname, timestamp):
+def initial_save_basketball_json(players, draftname):
     people = []
 
     for p in players:
@@ -436,8 +434,7 @@ def initial_save_basketball_meta_json(
     ai_set,
     pool,
     cap,
-    player_file,
-    timestamp
+    player_file
 ):
     filename = f"{draftname}_bk_meta.json"
 
@@ -485,7 +482,7 @@ def initial_save_basketball_meta_json(
     return output_path
 
 
-def initial_save_basketball_log_json(draftname, timestamp):
+def initial_save_basketball_log_json(draftname):
     filename = f"{draftname}_bk_log.json"
 
     output_dir = Path("drafts")
@@ -532,7 +529,7 @@ def load_saved_basketball_draft(filename):
     if "_bk_" not in stem:
         raise ValueError(f"Not a basketball draft file: {filename}")
 
-    draftname, timestamp = stem.split("_bk", 1)
+    draftname = stem.split("_bk")[0]
 
     meta_path = draft_dir / f"{draftname}_bk_meta.json"
     log_path = draft_dir / f"{draftname}_bk_log.json"
@@ -557,8 +554,7 @@ def load_saved_basketball_draft(filename):
         "player_path": player_path,
         "meta_path": meta_path,
         "log_path": log_path,
-        "draftname": draftname,
-        "timestamp": timestamp,
+        "draftname": draftname
     }
 
 def load_basketball_meta(draftname):
@@ -711,7 +707,7 @@ def load_football(pool, num_teams):
     return people
 
 
-def initial_save_football_json(players, draftname, timestamp):
+def initial_save_football_json(players, draftname):
     people = []
 
     for p in players:
@@ -743,8 +739,7 @@ def initial_save_football_meta_json(
     ai_set,
     pool,
     cap,
-    player_file,
-    timestamp
+    player_file
 ):
     filename = f"{draftname}_fb_meta.json"
 
@@ -792,7 +787,7 @@ def initial_save_football_meta_json(
     return output_path
 
 
-def initial_save_football_log_json(draftname, timestamp):
+def initial_save_football_log_json(draftname):
     filename = f"{draftname}_fb_log.json"
 
     output_dir = Path("drafts")
@@ -839,7 +834,7 @@ def load_saved_football_draft(filename):
     if "_fb_" not in stem:
         raise ValueError(f"Not a football draft file: {filename}")
 
-    draftname, timestamp = stem.split("_fb", 1)
+    draftname = stem.split("_fb")[0]
 
     meta_path = draft_dir / f"{draftname}_fb_meta.json"
     log_path = draft_dir / f"{draftname}_fb_log.json"
@@ -864,11 +859,10 @@ def load_saved_football_draft(filename):
         "player_path": player_path,
         "meta_path": meta_path,
         "log_path": log_path,
-        "draftname": draftname,
-        "timestamp": timestamp,
+        "draftname": draftname
     }
 
-def initial_save_football_json(players, draftname, timestamp):
+def initial_save_football_json(players, draftname):
     people = []
 
     for p in players:
