@@ -447,7 +447,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // show first team roster on load
     const first = document.querySelector('.roster-team');
     if (first) first.style.display = 'block';
-    setActiveLogo("{{ all_teams[0].name }}");  // or pass current_team from route
+    setTimeout(() => {
+        const teamName = "{{ current_team }}";
+        console.log('Setting active logo:', teamName);
+        console.log('Logo found:', document.querySelector(`.logo-wrap[data-team="${teamName}"]`));
+        setActiveLogo(teamName);
+    }, 200);
 
     // player row click handler
     document.querySelectorAll('#playerBody tr').forEach(row => {
@@ -469,8 +474,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // start timer for first pick
-    const firstTeamType = "{{ all_teams[0].is_human | lower }}";
-    startTimer(firstTeamType === 'true' ? 120 : 15);
+    const firstTeamType = "{{ current_team_type }}";
+    console.log('firstTeamType:', firstTeamType);
+    startTimer(firstTeamType === 'human' ? 120 : 15);
 });
 
 // ── Sort table ──
@@ -568,6 +574,16 @@ function skipPick() {
         sport:     currentSport
     });
 }
+
+function switchStatView(view) {
+    const showReal  = view === 'real';
+    document.querySelectorAll('.stat-real').forEach(el => {
+        el.style.display = showReal ? '' : 'none';
+    });
+    document.querySelectorAll('.stat-strat').forEach(el => {
+        el.style.display = showReal ? 'none' : '';
+    });
+}
 </script>
 {% endblock %}
 
@@ -584,8 +600,7 @@ function skipPick() {
 {% for row in logo_rows %}
 <div class="logo-strip">
   {% for team in row %}
-  <div class="logo-wrap {% if loop.first and loop.revcount == loop.length %}active{% endif %}"
-       data-team="{{ team.name }}">
+  <div class="logo-wrap" data-team="{{ team.name }}">
     <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/baseball/{{ team.name }}_bb.png"
          alt="{{ team.name }}"
          onerror="this.style.opacity='0.2'">
@@ -635,6 +650,11 @@ function skipPick() {
             <button class="btn-pos" onclick="filterPos(this,'RP')">RP</button>
 
         </div>
+        <select id="statView" onchange="switchStatView(this.value)" class="roster-select" style="width:140px;">
+            <option value="real">Real Stats</option>
+            <option value="strat">Strat Stats</option>
+        </select>
+
     </div>
 
     <table class="player-table">
@@ -643,18 +663,28 @@ function skipPick() {
                   <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
                   <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
                   <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(3)">AVG <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(4)">HR <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(5)">RBI <span class="sort-icon">↕</span></th>
+                  <!-- real stats -->
+                    <th class="stat-real" onclick="sortTable(3)">AVG <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(4)">HR <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(5)">RBI <span class="sort-icon">↕</span></th>
+                    <!-- strat stats -->
+                    <th class="stat-strat" style="display:none" onclick="sortTable(3)">OBTBvL <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(4)">OBTBvR <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(5)">Fielding <span class="sort-icon">↕</span></th>
               </tr>
               <tr id="pitcher-head" style="display:none">
-                  <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(3)">ERA <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(4)">W <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(5)">WHIP <span class="sort-icon">↕</span></th>
-              </tr>
+                <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
+                <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
+                <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
+                <!-- real stats -->
+                <th class="stat-real" onclick="sortTable(3)">ERA <span class="sort-icon">↕</span></th>
+                <th class="stat-real" onclick="sortTable(4)">W <span class="sort-icon">↕</span></th>
+                <th class="stat-real" onclick="sortTable(5)">WHIP <span class="sort-icon">↕</span></th>
+                <!-- strat stats -->
+                <th class="stat-strat" style="display:none" onclick="sortTable(3)">OBTBvL <span class="sort-icon">↕</span></th>
+                <th class="stat-strat" style="display:none" onclick="sortTable(4)">OBTBvR <span class="sort-icon">↕</span></th>
+                <th class="stat-strat" style="display:none" onclick="sortTable(5)">Endurance <span class="sort-icon">↕</span></th>
+            </tr>
           </thead>
     </table>
     <div class="pane-center-scroll">
@@ -662,24 +692,34 @@ function skipPick() {
           <tbody id="playerBody">
               {% for p in players %}
               {% if p.kind == "hitter" %}
-              <tr data-pos="{{ p.short_pos }}" data-kind="hitter" data-id="{{ p.id }}">
-                  <td class="pos-badge">{{ p.short_pos }}</td>
-                  <td>{{ p.FirstName }} {{ p.LastName }}</td>
-                  <td>{{ p.s_team }}</td>
-                  <td>{{ p.b_batting_avg if p.b_batting_avg is defined else '—' }}</td>
-                  <td>{{ p.b_hr if p.b_hr is defined else '—' }}</td>
-                  <td>{{ p.b_rbi if p.b_rbi is defined else '—' }}</td>
-              </tr>
+                <tr data-pos="{{ p.short_pos }}" data-kind="hitter" data-id="{{ p.id }}">
+                    <td class="pos-badge">{{ p.short_pos }}</td>
+                    <td>{{ p.FirstName }} {{ p.LastName }}</td>
+                    <td>{{ p.s_team }}</td>
+                    <!-- real stats -->
+                    <td class="stat-real">{{ p.b_batting_avg if p.b_batting_avg is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.b_hr if p.b_hr is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.b_rbi if p.b_rbi is defined else '—' }}</td>
+                    <!-- strat stats -->
+                    <td class="stat-strat" style="display:none">{{ p.s_obtbvl if p.s_obtbvl is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.s_obtbvr if p.s_obtbvr is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.s_fielding if p.s_fielding is defined else '—' }}</td>
+                </tr>
               {% else %}
-              <tr data-pos="{{ p.short_pos }}" data-kind="pitcher" data-id="{{ p.id }}" style="display:none">
-                  <td class="pos-badge">{{ p.short_pos }}</td>
-                  <td>{{ p.FirstName }} {{ p.LastName }}</td>
-                  <td>{{ p.s_team }}</td>
-                  <td>{{ p.p_earned_run_avg if p.p_earned_run_avg is defined else '—' }}</td>
-                  <td>{{ p.p_w if p.p_w is defined else '—' }}</td>
-                  <td>{{ p.p_whip if p.p_whip is defined else '—' }}</td>
-              </tr>
-              {% endif %}
+                <tr data-pos="{{ p.short_pos }}" data-kind="pitcher" data-id="{{ p.id }}" style="display:none">
+                    <td class="pos-badge">{{ p.short_pos }}</td>
+                    <td>{{ p.FirstName }} {{ p.LastName }}</td>
+                    <td>{{ p.s_team }}</td>
+                    <!-- real stats -->
+                    <td class="stat-real">{{ p.p_earned_run_avg if p.p_earned_run_avg is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.p_w if p.p_w is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.p_whip if p.p_whip is defined else '—' }}</td>
+                    <!-- strat stats -->
+                    <td class="stat-strat" style="display:none">{{ p.s_obtbvl if p.s_obtbvl is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.s_obtbvr if p.s_obtbvr is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.s_endurance if p.s_endurance is defined else '—' }}</td>
+                </tr>
+                {% endif %}
               {% endfor %}
           </tbody>
     </table>
@@ -698,13 +738,15 @@ function skipPick() {
   <!-- Right: on-the-clock team roster -->
   <div class="pane-right">
     <h6>On the Clock</h6>
-    <div class="on-clock" id="clockTeam">{{ all_teams[0].name }}</div>
+    <div class="on-clock" id="clockTeam">{{ current_team }}</div>
 
     <select id="rosterSelect" onchange="showRoster(this.value)" class="roster-select">
-        {% for team in all_teams %}
-        <option value="{{ team.name }}">{{ team.name }}</option>
-        {% endfor %}
-    </select>
+    {% for team in all_teams %}
+    <option value="{{ team.name }}" {{ 'selected' if team.name == current_team else '' }}>
+        {{ team.name }}
+    </option>
+    {% endfor %}
+</select>
 
     {% for team in all_teams %}
     <div class="roster-team" id="roster-{{ team.name }}" style="display:none">

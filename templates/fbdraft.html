@@ -447,7 +447,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // show first team roster on load
     const first = document.querySelector('.roster-team');
     if (first) first.style.display = 'block';
-    setActiveLogo("{{ all_teams[0].name }}");  // or pass current_team from route
+    setTimeout(() => {
+        const teamName = "{{ current_team }}";
+        console.log('Setting active logo:', teamName);
+        console.log('Logo found:', document.querySelector(`.logo-wrap[data-team="${teamName}"]`));
+        setActiveLogo(teamName);
+    }, 200);
 
     // player row click handler
     document.querySelectorAll('#playerBody tr').forEach(row => {
@@ -469,8 +474,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // start timer for first pick
-    const firstTeamType = "{{ all_teams[0].is_human | lower }}";
-    startTimer(firstTeamType === 'true' ? 120 : 15);
+    const firstTeamType = "{{ current_team_type }}";
+    startTimer(firstTeamType === 'human' ? 120 : 15);
 });
 
 // ── Sort table ──
@@ -574,6 +579,16 @@ function skipPick() {
         sport:     currentSport
     });
 }
+
+function switchStatView(view) {
+    const showReal  = view === 'real';
+    document.querySelectorAll('.stat-real').forEach(el => {
+        el.style.display = showReal ? '' : 'none';
+    });
+    document.querySelectorAll('.stat-strat').forEach(el => {
+        el.style.display = showReal ? 'none' : '';
+    });
+}
 </script>
 {% endblock %}
 
@@ -634,37 +649,48 @@ function skipPick() {
             <button class="btn-pos" onclick="filterPos(this,'FB')">FB</button>
             <button class="btn-pos" onclick="filterPos(this,'TE')">TE</button>
             <button class="btn-pos" onclick="filterPos(this,'WR')">WR</button>
-
-
         </div>
+        <select id="statView" onchange="switchStatView(this.value)" class="roster-select" style="width:140px;">
+            <option value="real">Real Stats</option>
+            <option value="strat">Strat Stats</option>
+        </select>
     </div>
 
     <table class="player-table">
             <thead id="tableHead">
               <tr id="passing-head">
-                  <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(3)">Pass Yds <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(4)">Completion% <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(5)">QB Rating <span class="sort-icon">↕</span></th>
-              </tr>
+                    <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
+                    <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
+                    <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(3)">Pass Yds <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(4)">Comp% <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(5)">QB Rat <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(3)">Y/A <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(4)">Cmp% <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(5)">QB Rat <span class="sort-icon">↕</span></th>
+                </tr>
               <tr id="rushing-head" style="display:none">
-                  <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(3)">Rush Yds <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(4)">Rush TD <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(5)">Rush per Carry <span class="sort-icon">↕</span></th>
-              </tr>
+                    <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
+                    <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
+                    <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(3)">Rush Yds <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(4)">Rush TD <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(5)">Avg <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(3)">Y/Rush <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(4)">LB-R <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(5)">ER-R <span class="sort-icon">↕</span></th>
+                </tr>
               <tr id="receiving-head" style="display:none">
-                  <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(3)">Receiving Yds <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(4)">Receiving TD <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(5)">Completion% <span class="sort-icon">↕</span></th>
-              </tr>
+                    <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
+                    <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
+                    <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(3)">Rec Yds <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(4)">Rec TD <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(5)">Rec% <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(3)">Y/Rec <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(4)">SPR-Y <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(5)">LPR-Y <span class="sort-icon">↕</span></th>
+                </tr>
           </thead>
     </table>
     <div class="pane-center-scroll">
@@ -676,27 +702,36 @@ function skipPick() {
                     <td class="pos-badge">{{ p.short_pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
                     <td>{{ p.TM }}</td>
-                    <td>{{ p.PassYards if p.PassYards is defined else '—' }}</td>
-                    <td>{{ p['s_Cmp%'] if p['s_Cmp%'] is defined else '—' }}</td>
-                    <td>{{ p.s_QBRat if p.s_QBRat is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.PassYards if p.PassYards is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.CompPct if p.CompPct is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.s_QBRat if p.s_QBRat is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.s_YpA if p.s_YpA is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p['s_Cmp%'] if p['s_Cmp%'] is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.s_QBRat if p.s_QBRat is defined else '—' }}</td>
                 </tr>
                 {% elif p.kind == "rusher" %}
-                <tr data-pos="{{ p.short_pos }}" data-kind="rusher" data-id="{{ p.id }}">
-                    <td class="pos-badge">{{ p.short_pos }}</td>
-                    <td>{{ p.FirstName }} {{ p.LastName }}</td>
-                    <td>{{ p.TM }}</td>
-                    <td>{{ p.RushYards if p.RushYards is defined else '—' }}</td>
-                    <td>{{ p.RushTDs if p.RushTDs is defined else '—' }}</td>
-                    <td>{{ p.s_YpRush if p.s_YpRush is defined else '—' }}</td>
-                </tr>
+                    <tr data-pos="{{ p.short_pos }}" data-kind="rusher" data-id="{{ p.id }}">
+                        <td class="pos-badge">{{ p.short_pos }}</td>
+                        <td>{{ p.FirstName }} {{ p.LastName }}</td>
+                        <td>{{ p.TM }}</td>
+                        <td class="stat-real">{{ p.RushYards if p.RushYards is defined else '—' }}</td>
+                        <td class="stat-real">{{ p.RushTDs if p.RushTDs is defined else '—' }}</td>
+                        <td class="stat-real">{{ p.RushAvg if p.RushAvg is defined else '—' }}</td>
+                        <td class="stat-strat" style="display:none">{{ p.s_YpRush if p.s_YpRush is defined else '—' }}</td>
+                        <td class="stat-strat" style="display:none">{{ p['s_LB-R'] if p['s_LB-R'] is defined else '—' }}</td>
+                        <td class="stat-strat" style="display:none">{{ p['s_ER-R'] if p['s_ER-R'] is defined else '—' }}</td>
+                    </tr>
                 {% else %}
                 <tr data-pos="{{ p.short_pos }}" data-kind="receiver" data-id="{{ p.id }}" style="display:none">
                     <td class="pos-badge">{{ p.short_pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
                     <td>{{ p.TM }}</td>
-                    <td>{{ p.RecYards if p.RecYards is defined else '—' }}</td>
-                    <td>{{ p.RecTDs if p.RecTDs is defined else '—' }}</td>
-                    <td>{{ p['s_Rec%'] if p['s_Rec%'] is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.RecYards if p.RecYards is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.RecTDs if p.RecTDs is defined else '—' }}</td>
+                    <td class="stat-real">{{ p['s_Rec%'] if p['s_Rec%'] is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.s_YpRec if p.s_YpRec is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p['s_SPR-Y'] if p['s_SPR-Y'] is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p['s_LPR-Y'] if p['s_LPR-Y'] is defined else '—' }}</td>
                 </tr>
                 {% endif %}
               {% endfor %}
@@ -717,13 +752,15 @@ function skipPick() {
   <!-- Right: on-the-clock team roster -->
   <div class="pane-right">
     <h6>On the Clock</h6>
-    <div class="on-clock" id="clockTeam">{{ all_teams[0].name }}</div>
+    <div class="on-clock" id="clockTeam">{{ current_team }}</div>
 
     <select id="rosterSelect" onchange="showRoster(this.value)" class="roster-select">
-        {% for team in all_teams %}
-        <option value="{{ team.name }}">{{ team.name }}</option>
-        {% endfor %}
-    </select>
+    {% for team in all_teams %}
+    <option value="{{ team.name }}" {{ 'selected' if team.name == current_team else '' }}>
+        {{ team.name }}
+    </option>
+    {% endfor %}
+</select>
 
     {% for team in all_teams %}
     <div class="roster-team" id="roster-{{ team.name }}" style="display:none">

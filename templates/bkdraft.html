@@ -442,7 +442,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // show first team roster on load
     const first = document.querySelector('.roster-team');
     if (first) first.style.display = 'block';
-    setActiveLogo("{{ all_teams[0].name }}");  // or pass current_team from route
+    setTimeout(() => {
+        const teamName = "{{ current_team }}";
+        console.log('Setting active logo:', teamName);
+        console.log('Logo found:', document.querySelector(`.logo-wrap[data-team="${teamName}"]`));
+        setActiveLogo(teamName);
+    }, 200);
 
     // player row click handler
     document.querySelectorAll('#playerBody tr').forEach(row => {
@@ -464,8 +469,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // start timer for first pick
-    const firstTeamType = "{{ all_teams[0].is_human | lower }}";
-    startTimer(firstTeamType === 'true' ? 120 : 15);
+    const firstTeamType = "{{ current_team_type }}";
+    startTimer(firstTeamType === 'human' ? 120 : 15);
 });
 
 // ── Sort table ──
@@ -553,6 +558,16 @@ function skipPick() {
         sport:     currentSport
     });
 }
+
+function switchStatView(view) {
+    const showReal  = view === 'real';
+    document.querySelectorAll('.stat-real').forEach(el => {
+        el.style.display = showReal ? '' : 'none';
+    });
+    document.querySelectorAll('.stat-strat').forEach(el => {
+        el.style.display = showReal ? 'none' : '';
+    });
+}
 </script>
 {% endblock %}
 
@@ -567,8 +582,7 @@ function skipPick() {
 {% for row in logo_rows %}
 <div class="logo-strip">
   {% for team in row %}
-  <div class="logo-wrap {% if loop.first and loop.revcount == loop.length %}active{% endif %}"
-       data-team="{{ team.name }}">
+  <div class="logo-wrap" data-team="{{ team.name }}">
     <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/basketball/{{ team.name }}_bk.png"
          alt="{{ team.name }}"
          onerror="this.style.opacity='0.2'">
@@ -609,18 +623,25 @@ function skipPick() {
             <button class="btn-pos" onclick="filterPos(this,'F')">F</button>
             <button class="btn-pos" onclick="filterPos(this,'G')">G</button>
         </div>
+        <select id="statView" onchange="switchStatView(this.value)" class="roster-select" style="width:140px;">
+            <option value="real">Real Stats</option>
+            <option value="strat">Strat Stats</option>
+        </select>
     </div>
 
     <!-- Sticky header table -->
     <table class="player-table">
-        <thead>
+       <thead>
             <tr>
                 <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
                 <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
                 <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
-                <th onclick="sortTable(3)">PPG <span class="sort-icon">↕</span></th>
-                <th onclick="sortTable(4)">RPG <span class="sort-icon">↕</span></th>
-                <th onclick="sortTable(5)">APG <span class="sort-icon">↕</span></th>
+                <th class="stat-real" onclick="sortTable(3)">PPG <span class="sort-icon">↕</span></th>
+                <th class="stat-real" onclick="sortTable(4)">RPG <span class="sort-icon">↕</span></th>
+                <th class="stat-real" onclick="sortTable(5)">APG <span class="sort-icon">↕</span></th>
+                <th class="stat-strat" style="display:none" onclick="sortTable(3)">OMade <span class="sort-icon">↕</span></th>
+                <th class="stat-strat" style="display:none" onclick="sortTable(4)">IMade <span class="sort-icon">↕</span></th>
+                <th class="stat-strat" style="display:none" onclick="sortTable(5)">PassDazz <span class="sort-icon">↕</span></th>
             </tr>
         </thead>
     </table>
@@ -634,9 +655,12 @@ function skipPick() {
                     <td class="pos-badge">{{ p.Pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
                     <td>{{ p.Team }}</td>
-                    <td>{{ p.ptspgm if p.ptspgm is defined else '—' }}</td>
-                    <td>{{ p.rbspgm if p.rbspgm is defined else '—' }}</td>
-                    <td>{{ p.astpgm if p.astpgm is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.ptspgm if p.ptspgm is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.rbspgm if p.rbspgm is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.astpgm if p.astpgm is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.Omade if p.Omade is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.Imade if p.Imade is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.PassDazz if p.PassDazz is defined else '—' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -653,13 +677,15 @@ function skipPick() {
   <!-- Right: on-the-clock -->
   <div class="pane-right">
     <h6>On the Clock</h6>
-    <div class="on-clock" id="clockTeam">{{ all_teams[0].name }}</div>
+    <div class="on-clock" id="clockTeam">{{ current_team }}</div>
 
     <select id="rosterSelect" onchange="showRoster(this.value)" class="roster-select">
-        {% for team in all_teams %}
-        <option value="{{ team.name }}">{{ team.name }}</option>
-        {% endfor %}
-    </select>
+    {% for team in all_teams %}
+    <option value="{{ team.name }}" {{ 'selected' if team.name == current_team else '' }}>
+        {{ team.name }}
+    </option>
+    {% endfor %}
+</select>
 
     {% for team in all_teams %}
     <div class="roster-team" id="roster-{{ team.name }}" style="display:none">
