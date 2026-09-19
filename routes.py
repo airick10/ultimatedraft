@@ -83,21 +83,48 @@ def bb_load():
     except ValueError as exc:
         abort(400, str(exc))
 
-    meta = draft_data.get("meta", {})
-    log = draft_data.get("log", [])
+    meta    = draft_data.get("meta", {})
+    log     = draft_data.get("log", [])
     players = draft_data.get("players", [])
 
+    # build team lists
     human_teams = []
-    ai_set = []
-
+    ai_set      = []
     for team in meta.get("teams", []):
         if team.get("type") == "human":
             human_teams.append(team.get("team_name"))
         else:
             ai_set.append(team.get("team_name"))
 
+    # build unified team list and logo rows
+    all_teams = [{"name": t, "is_human": True}  for t in human_teams] + \
+                [{"name": t, "is_human": False} for t in ai_set]
+    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
+
+    # baseball roster slots
+    roster_slots = ["C", "C", "1B", "2B", "SS", "3B", "LF", "CF", "RF",
+                    "UT", "UT", "UT", "UT", "UT", "UT",
+                    "S", "S", "S", "S", "S",
+                    "R", "R", "R", "R", "R"]
+
+    # build rosters from log
+    rosters = {}
+    for entry in log:
+        tid = entry['team_id']
+        if tid not in rosters:
+            rosters[tid] = []
+        rosters[tid].append(entry)
+
+    current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
+    current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
+    current_team_type = current_team_obj['type'] if current_team_obj else 'human'
+
     return render_template(
         "bbdraft.html",
+        all_teams=all_teams,
+        logo_rows=logo_rows,
+        roster_slots=roster_slots,
+        rosters=rosters,
         num_teams=meta.get("num_teams", 0),
         human_teams=human_teams,
         ai_set=ai_set,
@@ -107,8 +134,9 @@ def bb_load():
         players=players,
         draft_log=log,
         draft_file=str(draft_data.get("player_path", "")),
-        meta_file=str(draft_data.get("meta_path", "")),
-        log_file=str(draft_data.get("log_path", ""))
+        sport='bb',
+        current_team=current_team,
+        current_team_type=current_team_type,
     )
 
 @main.route("/bb_confirm", methods=["POST"])
@@ -192,16 +220,16 @@ def bb_draft():
         id_set = set(str(x) for x in selected_ids)
         people = [p for p in all_players if str(p.get("id")) in id_set]
 
-    # Build a unified team list: human teams first, then AI
-    # Each entry is a dict with name + is_human flag
+    # build unified team list and logo rows
     all_teams = [{"name": t, "is_human": True}  for t in human_teams] + \
                 [{"name": t, "is_human": False} for t in ai_set]
-
-    # Chunk teams into rows of 8 for the logo strip
     logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
 
-    # Roster slot labels for basketball (2 of each position)
-    roster_slots = ["C", "C", "1B", "2B", "SS", "3B", "LF", "CF", "RF", "UT", "UT", "UT", "UT", "UT", "UT", "S", "S", "S", "S", "S", "R", "R", "R", "R", "R"]
+    # roster slot labels
+    roster_slots = ["C", "C", "1B", "2B", "SS", "3B", "LF", "CF", "RF",
+                    "UT", "UT", "UT", "UT", "UT", "UT",
+                    "S", "S", "S", "S", "S",
+                    "R", "R", "R", "R", "R"]
 
     output_path = Path("drafts") / f"{draftname}_bb.json"
     meta_path   = Path("drafts") / f"{draftname}_bb_meta.json"
@@ -217,12 +245,20 @@ def bb_draft():
     with open(log_path, "r", encoding="utf-8") as f:
         draft_log = json.load(f)
 
+    with open(meta_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+
     rosters = {}
     for entry in draft_log:
         tid = entry['team_id']
         if tid not in rosters:
             rosters[tid] = []
         rosters[tid].append(entry)
+
+    # current picking team
+    current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
+    current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
+    current_team_type = current_team_obj['type'] if current_team_obj else 'human'
 
     return render_template(
         "bbdraft.html",
@@ -236,6 +272,8 @@ def bb_draft():
         draft_file=output_path,
         draft_log=draft_log,
         rosters=rosters,
+        current_team=current_team,
+        current_team_type=current_team_type,
         sport="bb"
     )
 
@@ -268,21 +306,46 @@ def bk_load():
     except ValueError as exc:
         abort(400, str(exc))
 
-    meta = draft_data.get("meta", {})
-    log = draft_data.get("log", [])
+    meta    = draft_data.get("meta", {})
+    log     = draft_data.get("log", [])
     players = draft_data.get("players", [])
 
+    # build team lists
     human_teams = []
-    ai_set = []
-
+    ai_set      = []
     for team in meta.get("teams", []):
         if team.get("type") == "human":
             human_teams.append(team.get("team_name"))
         else:
             ai_set.append(team.get("team_name"))
 
+    # build unified team list and logo rows
+    all_teams = [{"name": t, "is_human": True}  for t in human_teams] + \
+                [{"name": t, "is_human": False} for t in ai_set]
+    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
+
+    # basketball roster slots
+    roster_slots = ["C", "C", "PF", "PF", "SF", "SF", "SG", "SG", "PG", "PG"]
+
+    # build rosters from log
+    rosters = {}
+    for entry in log:
+        tid = entry['team_id']
+        if tid not in rosters:
+            rosters[tid] = []
+        rosters[tid].append(entry)
+
+    # current picking team
+    current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
+    current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
+    current_team_type = current_team_obj['type'] if current_team_obj else 'human'
+
     return render_template(
         "bkdraft.html",
+        all_teams=all_teams,
+        logo_rows=logo_rows,
+        roster_slots=roster_slots,
+        rosters=rosters,
         num_teams=meta.get("num_teams", 0),
         human_teams=human_teams,
         ai_set=ai_set,
@@ -292,8 +355,9 @@ def bk_load():
         players=players,
         draft_log=log,
         draft_file=str(draft_data.get("player_path", "")),
-        meta_file=str(draft_data.get("meta_path", "")),
-        log_file=str(draft_data.get("log_path", ""))
+        current_team=current_team,
+        current_team_type=current_team_type,
+        sport='bk'
     )
 
 @main.route("/bk_confirm", methods=["POST"])
@@ -429,15 +493,12 @@ def bk_draft():
         id_set = set(str(x) for x in selected_ids)
         people = [p for p in all_players if str(p.get("id")) in id_set]
 
-    # Build a unified team list: human teams first, then AI
-    # Each entry is a dict with name + is_human flag
+    # build unified team list and logo rows
     all_teams = [{"name": t, "is_human": True}  for t in human_teams] + \
                 [{"name": t, "is_human": False} for t in ai_set]
-
-    # Chunk teams into rows of 8 for the logo strip
     logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
 
-    # Roster slot labels for basketball (2 of each position)
+    # roster slot labels
     roster_slots = ["C", "C", "PF", "PF", "SF", "SF", "SG", "SG", "PG", "PG"]
 
     output_path = Path("drafts") / f"{draftname}_bk.json"
@@ -454,12 +515,20 @@ def bk_draft():
     with open(log_path, "r", encoding="utf-8") as f:
         draft_log = json.load(f)
 
+    with open(meta_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+
     rosters = {}
     for entry in draft_log:
         tid = entry['team_id']
         if tid not in rosters:
             rosters[tid] = []
         rosters[tid].append(entry)
+
+    # current picking team
+    current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
+    current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
+    current_team_type = current_team_obj['type'] if current_team_obj else 'human'
 
     return render_template(
         "bkdraft.html",
@@ -473,6 +542,8 @@ def bk_draft():
         draft_file=output_path,
         draft_log=draft_log,
         rosters=rosters,
+        current_team=current_team,
+        current_team_type=current_team_type,
         sport="bk"
     )
 
@@ -480,8 +551,8 @@ def bk_draft():
 
 @main.route("/football")
 def start_football():
-    #people = load_football()
-    return render_template("football.html")
+    saved_drafts = get_saved_football_drafts()
+    return render_template("football.html", saved_drafts=saved_drafts)
 
 @main.route("/show_fb_logos")
 def show_fb_logos():
@@ -571,21 +642,47 @@ def fb_load():
     except ValueError as exc:
         abort(400, str(exc))
 
-    meta = draft_data.get("meta", {})
-    log = draft_data.get("log", [])
+    meta    = draft_data.get("meta", {})
+    log     = draft_data.get("log", [])
     players = draft_data.get("players", [])
 
+    # build team lists
     human_teams = []
-    ai_set = []
-
+    ai_set      = []
     for team in meta.get("teams", []):
         if team.get("type") == "human":
             human_teams.append(team.get("team_name"))
         else:
             ai_set.append(team.get("team_name"))
 
+    # build unified team list and logo rows
+    all_teams = [{"name": t, "is_human": True}  for t in human_teams] + \
+                [{"name": t, "is_human": False} for t in ai_set]
+    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
+
+    # football roster slots
+    roster_slots = ["QB", "QB", "HB", "HB", "FB", "TE", "TE",
+                    "WR", "WR", "WR", "WR", "Def", "Special"]
+
+    # build rosters from log
+    rosters = {}
+    for entry in log:
+        tid = entry['team_id']
+        if tid not in rosters:
+            rosters[tid] = []
+        rosters[tid].append(entry)
+
+    # current picking team
+    current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
+    current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
+    current_team_type = current_team_obj['type'] if current_team_obj else 'human'
+
     return render_template(
         "fbdraft.html",
+        all_teams=all_teams,
+        logo_rows=logo_rows,
+        roster_slots=roster_slots,
+        rosters=rosters,
         num_teams=meta.get("num_teams", 0),
         human_teams=human_teams,
         ai_set=ai_set,
@@ -595,8 +692,9 @@ def fb_load():
         players=players,
         draft_log=log,
         draft_file=str(draft_data.get("player_path", "")),
-        meta_file=str(draft_data.get("meta_path", "")),
-        log_file=str(draft_data.get("log_path", ""))
+        current_team=current_team,
+        current_team_type=current_team_type,
+        sport='fb'
     )
 
 
@@ -618,16 +716,14 @@ def fb_draft():
         id_set = set(str(x) for x in selected_ids)
         people = [p for p in all_players if str(p.get("id")) in id_set]
 
-    # Build a unified team list: human teams first, then AI
-    # Each entry is a dict with name + is_human flag
+    # build unified team list and logo rows
     all_teams = [{"name": t, "is_human": True}  for t in human_teams] + \
                 [{"name": t, "is_human": False} for t in ai_set]
-
-    # Chunk teams into rows of 8 for the logo strip
     logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
 
-    # Roster slot labels for basketball (2 of each position)
-    roster_slots = ["QB", "QB", "RB", "RB", "FB", "TE", "TE", "WR", "WR", "WR", "WR"]
+    # roster slot labels
+    roster_slots = ["QB", "QB", "HB", "HB", "FB", "TE", "TE",
+                    "WR", "WR", "WR", "WR", "Def", "Special"]
 
     output_path = Path("drafts") / f"{draftname}_fb.json"
     meta_path   = Path("drafts") / f"{draftname}_fb_meta.json"
@@ -643,12 +739,20 @@ def fb_draft():
     with open(log_path, "r", encoding="utf-8") as f:
         draft_log = json.load(f)
 
+    with open(meta_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+
     rosters = {}
     for entry in draft_log:
         tid = entry['team_id']
         if tid not in rosters:
             rosters[tid] = []
         rosters[tid].append(entry)
+
+    # current picking team
+    current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
+    current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
+    current_team_type = current_team_obj['type'] if current_team_obj else 'human'
 
     return render_template(
         "fbdraft.html",
@@ -662,6 +766,8 @@ def fb_draft():
         draft_file=output_path,
         draft_log=draft_log,
         rosters=rosters,
+        current_team=current_team,
+        current_team_type=current_team_type,
         sport="fb"
     )
 
@@ -724,6 +830,9 @@ def handle_make_pick(data):
     next_team_id = meta['current_team_id']
     next_team = get_team_by_id(meta, next_team_id)
 
+    print(f">>> saving meta: current_pick={meta['current_pick']}, current_team_id={meta['current_team_id']}")
+
+
     # THEN build log entry
     entry = {
         "pick":      pick_num,
@@ -745,6 +854,7 @@ def handle_make_pick(data):
     elif sport == 'fb':
         save_football_meta(draftname, meta)
 
+    print(f">>> meta saved for {draftname}")
     # broadcast
     print(f">>> emitting pick_made: {entry}")
     socketio.emit('pick_made', entry)

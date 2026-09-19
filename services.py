@@ -169,7 +169,7 @@ def load_baseball(pool, num_teams):
 
 
 def load_saved_baseball_draft(filename):
-    draft_dir = Path("drafts")
+    draft_dir   = Path("drafts")
     player_path = draft_dir / filename
 
     if not player_path.exists():
@@ -177,13 +177,13 @@ def load_saved_baseball_draft(filename):
 
     stem = player_path.stem
 
-    if "_bb_" not in stem:
+    if "_bb" not in stem:
         raise ValueError(f"Not a baseball draft file: {filename}")
 
     draftname = stem.split("_bb")[0]
 
     meta_path = draft_dir / f"{draftname}_bb_meta.json"
-    log_path = draft_dir / f"{draftname}_bb_log.json"
+    log_path  = draft_dir / f"{draftname}_bb_log.json"
 
     with open(player_path, "r", encoding="utf-8") as f:
         players = json.load(f)
@@ -199,13 +199,13 @@ def load_saved_baseball_draft(filename):
             log = json.load(f)
 
     return {
-        "players": players,
-        "meta": meta,
-        "log": log,
+        "players":     players,
+        "meta":        meta,
+        "log":         log,
         "player_path": player_path,
-        "meta_path": meta_path,
-        "log_path": log_path,
-        "draftname": draftname
+        "meta_path":   meta_path,
+        "log_path":    log_path,
+        "draftname":   draftname
     }
 
 def initial_save_baseball_json(players, draftname):
@@ -311,13 +311,8 @@ def get_saved_baseball_drafts():
     if not draft_dir.exists():
         return saved_drafts
 
-    for file_path in sorted(draft_dir.glob("*_bb_*.json")):
-        name = file_path.name
-
-        if "_meta_" in name or "_log_" in name:
-            continue
-
-        saved_drafts.append(name)
+    for file_path in sorted(draft_dir.glob("*_bb.json")):
+        saved_drafts.append(file_path.name)
 
     saved_drafts.sort(reverse=True)
     return saved_drafts
@@ -505,13 +500,8 @@ def get_saved_basketball_drafts():
     if not draft_dir.exists():
         return saved_drafts
 
-    for file_path in sorted(draft_dir.glob("*_bk_*.json")):
-        name = file_path.name
-
-        if "_meta_" in name or "_log_" in name:
-            continue
-
-        saved_drafts.append(name)
+    for file_path in sorted(draft_dir.glob("*_bk.json")):
+        saved_drafts.append(file_path.name)
 
     saved_drafts.sort(reverse=True)
     return saved_drafts
@@ -520,41 +510,32 @@ def get_saved_basketball_drafts():
 def load_saved_basketball_draft(filename):
     draft_dir = Path("drafts")
     player_path = draft_dir / filename
-
     if not player_path.exists():
         raise FileNotFoundError(f"Draft file not found: {filename}")
-
-    stem = player_path.stem
-
-    if "_bk_" not in stem:
+    stem = player_path.stem  # "BKDraft_bk"
+    if "_bk" not in stem:
         raise ValueError(f"Not a basketball draft file: {filename}")
-
-    draftname = stem.split("_bk")[0]
-
+    draftname = stem.split("_bk")[0]  # "BKDraft"
     meta_path = draft_dir / f"{draftname}_bk_meta.json"
-    log_path = draft_dir / f"{draftname}_bk_log.json"
-
+    log_path  = draft_dir / f"{draftname}_bk_log.json"
     with open(player_path, "r", encoding="utf-8") as f:
         players = json.load(f)
-
     meta = {}
     if meta_path.exists():
         with open(meta_path, "r", encoding="utf-8") as f:
             meta = json.load(f)
-
     log = []
     if log_path.exists():
         with open(log_path, "r", encoding="utf-8") as f:
             log = json.load(f)
-
     return {
-        "players": players,
-        "meta": meta,
-        "log": log,
+        "players":     players,
+        "meta":        meta,
+        "log":         log,
         "player_path": player_path,
-        "meta_path": meta_path,
-        "log_path": log_path,
-        "draftname": draftname
+        "meta_path":   meta_path,
+        "log_path":    log_path,
+        "draftname":   draftname
     }
 
 def load_basketball_meta(draftname):
@@ -810,20 +791,16 @@ def get_saved_football_drafts():
     if not draft_dir.exists():
         return saved_drafts
 
-    for file_path in sorted(draft_dir.glob("*_fb_*.json")):
-        name = file_path.name
-
-        if "_meta_" in name or "_log_" in name:
-            continue
-
-        saved_drafts.append(name)
+    for file_path in sorted(draft_dir.glob("*_fb.json")):
+        saved_drafts.append(file_path.name)
 
     saved_drafts.sort(reverse=True)
     return saved_drafts
 
 
+
 def load_saved_football_draft(filename):
-    draft_dir = Path("drafts")
+    draft_dir   = Path("drafts")
     player_path = draft_dir / filename
 
     if not player_path.exists():
@@ -831,13 +808,13 @@ def load_saved_football_draft(filename):
 
     stem = player_path.stem
 
-    if "_fb_" not in stem:
+    if "_fb" not in stem:
         raise ValueError(f"Not a football draft file: {filename}")
 
     draftname = stem.split("_fb")[0]
 
     meta_path = draft_dir / f"{draftname}_fb_meta.json"
-    log_path = draft_dir / f"{draftname}_fb_log.json"
+    log_path  = draft_dir / f"{draftname}_fb_log.json"
 
     with open(player_path, "r", encoding="utf-8") as f:
         players = json.load(f)
@@ -853,13 +830,13 @@ def load_saved_football_draft(filename):
             log = json.load(f)
 
     return {
-        "players": players,
-        "meta": meta,
-        "log": log,
+        "players":     players,
+        "meta":        meta,
+        "log":         log,
         "player_path": player_path,
-        "meta_path": meta_path,
-        "log_path": log_path,
-        "draftname": draftname
+        "meta_path":   meta_path,
+        "log_path":    log_path,
+        "draftname":   draftname
     }
 
 def initial_save_football_json(players, draftname):
