@@ -97,8 +97,7 @@ def bb_load():
             ai_set.append(team.get("team_name"))
 
     # build unified team list and logo rows
-    all_teams = [{"name": t, "is_human": True}  for t in human_teams] + \
-                [{"name": t, "is_human": False} for t in ai_set]
+    all_teams = [{"name": t["team_name"], "is_human": t["type"] == "human"} for t in meta["teams"]]
     logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
 
     # baseball roster slots
@@ -220,11 +219,6 @@ def bb_draft():
         id_set = set(str(x) for x in selected_ids)
         people = [p for p in all_players if str(p.get("id")) in id_set]
 
-    # build unified team list and logo rows
-    all_teams = [{"name": t, "is_human": True}  for t in human_teams] + \
-                [{"name": t, "is_human": False} for t in ai_set]
-    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
-
     # roster slot labels
     roster_slots = ["C", "C", "1B", "2B", "SS", "3B", "LF", "CF", "RF",
                     "UT", "UT", "UT", "UT", "UT", "UT",
@@ -247,6 +241,9 @@ def bb_draft():
 
     with open(meta_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
+
+    all_teams = [{"name": t["team_name"], "is_human": t["type"] == "human"} for t in meta["teams"]]
+    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
 
     rosters = {}
     for entry in draft_log:
@@ -320,8 +317,7 @@ def bk_load():
             ai_set.append(team.get("team_name"))
 
     # build unified team list and logo rows
-    all_teams = [{"name": t, "is_human": True}  for t in human_teams] + \
-                [{"name": t, "is_human": False} for t in ai_set]
+    all_teams = [{"name": t["team_name"], "is_human": t["type"] == "human"} for t in meta["teams"]]
     logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
 
     # basketball roster slots
@@ -493,11 +489,6 @@ def bk_draft():
         id_set = set(str(x) for x in selected_ids)
         people = [p for p in all_players if str(p.get("id")) in id_set]
 
-    # build unified team list and logo rows
-    all_teams = [{"name": t, "is_human": True}  for t in human_teams] + \
-                [{"name": t, "is_human": False} for t in ai_set]
-    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
-
     # roster slot labels
     roster_slots = ["C", "C", "PF", "PF", "SF", "SF", "SG", "SG", "PG", "PG"]
 
@@ -517,6 +508,9 @@ def bk_draft():
 
     with open(meta_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
+
+    all_teams = [{"name": t["team_name"], "is_human": t["type"] == "human"} for t in meta["teams"]]
+    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
 
     rosters = {}
     for entry in draft_log:
@@ -656,8 +650,7 @@ def fb_load():
             ai_set.append(team.get("team_name"))
 
     # build unified team list and logo rows
-    all_teams = [{"name": t, "is_human": True}  for t in human_teams] + \
-                [{"name": t, "is_human": False} for t in ai_set]
+    all_teams = [{"name": t["team_name"], "is_human": t["type"] == "human"} for t in meta["teams"]]
     logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
 
     # football roster slots
@@ -716,11 +709,6 @@ def fb_draft():
         id_set = set(str(x) for x in selected_ids)
         people = [p for p in all_players if str(p.get("id")) in id_set]
 
-    # build unified team list and logo rows
-    all_teams = [{"name": t, "is_human": True}  for t in human_teams] + \
-                [{"name": t, "is_human": False} for t in ai_set]
-    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
-
     # roster slot labels
     roster_slots = ["QB", "QB", "HB", "HB", "FB", "TE", "TE",
                     "WR", "WR", "WR", "WR", "Def", "Special"]
@@ -741,6 +729,9 @@ def fb_draft():
 
     with open(meta_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
+
+    all_teams = [{"name": t["team_name"], "is_human": t["type"] == "human"} for t in meta["teams"]]
+    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
 
     rosters = {}
     for entry in draft_log:

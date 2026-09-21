@@ -268,6 +268,8 @@ def initial_save_baseball_meta_json(
         })
         team_id += 1
 
+    random.shuffle(teams)
+
     meta = {
         "draftname": draftname,
         "sport": "bb",
@@ -278,7 +280,7 @@ def initial_save_baseball_meta_json(
         "cap": cap,
         "player_file": str(player_file),
         "current_pick": 1,
-        "current_team_id": 1,
+        "current_team_id": teams[0]["team_id"],
         "teams": teams
     }
 
@@ -457,6 +459,8 @@ def initial_save_basketball_meta_json(
         })
         team_id += 1
 
+    random.shuffle(teams)
+
     meta = {
         "draftname": draftname,
         "sport": "bk",
@@ -467,7 +471,7 @@ def initial_save_basketball_meta_json(
         "cap": cap,
         "player_file": str(player_file),
         "current_pick": 1,
-        "current_team_id": 1,
+        "current_team_id": teams[0]["team_id"],
         "teams": teams
     }
 
@@ -748,6 +752,8 @@ def initial_save_football_meta_json(
         })
         team_id += 1
 
+    random.shuffle(teams)
+
     meta = {
         "draftname": draftname,
         "sport": "fb",
@@ -758,7 +764,7 @@ def initial_save_football_meta_json(
         "cap": cap,
         "player_file": str(player_file),
         "current_pick": 1,
-        "current_team_id": 1,
+        "current_team_id": teams[0]["team_id"],
         "teams": teams
     }
 
