@@ -65,8 +65,11 @@ body::before {
     overflow:hidden;
     text-overflow:ellipsis;
   }
-  .logo-wrap.active img  { filter:drop-shadow(0 0 10px #39ff14); }
-  .logo-wrap.active .team-label { color:#39ff14; }
+  .logo-wrap.active.human img  { filter:drop-shadow(0 0 10px #39ff14); }
+  .logo-wrap.active.human .team-label { color:#39ff14; }
+
+  .logo-wrap.active.ai img  { filter:drop-shadow(0 0 10px #ff4444); }
+  .logo-wrap.active.ai .team-label { color:#ff4444; }
 
   /* ── Main 3-pane row ── */
   .draft-body { display:flex; height:calc(100vh - 155px); overflow:hidden; }
@@ -512,14 +515,16 @@ function filterPos(btn, pos) {
     const isPasser   = (pos === 'QB');
     const isRusher   = (pos === 'HB' || pos === 'FB');
     const isReceiver = (pos === 'TE' || pos === 'WR');
+    const isOLDL     = (pos === 'DO');
+    const isSpecial  = (pos === 'KP');
     const isAll      = (pos === 'ALL');
 
-    // show correct header
     document.getElementById('passing-head').style.display   = (isPasser || isAll) ? '' : 'none';
     document.getElementById('rushing-head').style.display   = isRusher ? '' : 'none';
     document.getElementById('receiving-head').style.display = isReceiver ? '' : 'none';
+    document.getElementById('oldl-head').style.display      = isOLDL ? '' : 'none';
+    document.getElementById('special-head').style.display   = isSpecial ? '' : 'none';
 
-    // filter rows
     document.querySelectorAll('#playerBody tr').forEach(row => {
         if (isAll) {
             row.style.display = '';
@@ -605,8 +610,7 @@ function switchStatView(view) {
 {% for row in logo_rows %}
 <div class="logo-strip">
   {% for team in row %}
-  <div class="logo-wrap {% if loop.first and loop.revcount == loop.length %}active{% endif %}"
-       data-team="{{ team.name }}">
+  <div class="logo-wrap {{ 'human' if team.is_human else 'ai' }}" data-team="{{ team.name }}">
     <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/football/{{ team.name }}_fb.png"
          alt="{{ team.name }}"
          onerror="this.style.opacity='0.2'">
@@ -649,6 +653,8 @@ function switchStatView(view) {
             <button class="btn-pos" onclick="filterPos(this,'FB')">FB</button>
             <button class="btn-pos" onclick="filterPos(this,'TE')">TE</button>
             <button class="btn-pos" onclick="filterPos(this,'WR')">WR</button>
+            <button class="btn-pos" onclick="filterPos(this,'DO')">OL/DL</button>
+            <button class="btn-pos" onclick="filterPos(this,'KP')">Special</button>
         </div>
         <select id="statView" onchange="switchStatView(this.value)" class="roster-select" style="width:140px;">
             <option value="real">Real Stats</option>
@@ -691,6 +697,28 @@ function switchStatView(view) {
                     <th class="stat-strat" style="display:none" onclick="sortTable(4)">SPR-Y <span class="sort-icon">↕</span></th>
                     <th class="stat-strat" style="display:none" onclick="sortTable(5)">LPR-Y <span class="sort-icon">↕</span></th>
                 </tr>
+                <tr id="oldl-head" style="display:none">
+                    <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
+                    <th onclick="sortTable(1)">Team/Yr <span class="sort-icon">↕</span></th>
+                    <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(3)">Yds/Play <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(4)">Fum% <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(5)">Int% <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(3)">OL Run <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(4)">OL Pass <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(5)">QB/WR Fum <span class="sort-icon">↕</span></th>
+                </tr>
+                <tr id="special-head" style="display:none">
+                    <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
+                    <th onclick="sortTable(1)">Team/Yr <span class="sort-icon">↕</span></th>
+                    <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(3)">KO Avg <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(4)">PR Avg <span class="sort-icon">↕</span></th>
+                    <th class="stat-real" onclick="sortTable(5)">Punt AvgKick Cov <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(3)">XP <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(4)">FG &lt;33 <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(5)">Punt Avg <span class="sort-icon">↕</span></th>
+                </tr>
           </thead>
     </table>
     <div class="pane-center-scroll">
@@ -721,19 +749,43 @@ function switchStatView(view) {
                         <td class="stat-strat" style="display:none">{{ p['s_LB-R'] if p['s_LB-R'] is defined else '—' }}</td>
                         <td class="stat-strat" style="display:none">{{ p['s_ER-R'] if p['s_ER-R'] is defined else '—' }}</td>
                     </tr>
-                {% else %}
-                <tr data-pos="{{ p.short_pos }}" data-kind="receiver" data-id="{{ p.id }}" style="display:none">
-                    <td class="pos-badge">{{ p.short_pos }}</td>
-                    <td>{{ p.FirstName }} {{ p.LastName }}</td>
-                    <td>{{ p.TM }}</td>
-                    <td class="stat-real">{{ p.RecYards if p.RecYards is defined else '—' }}</td>
-                    <td class="stat-real">{{ p.RecTDs if p.RecTDs is defined else '—' }}</td>
-                    <td class="stat-real">{{ p['s_Rec%'] if p['s_Rec%'] is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p.s_YpRec if p.s_YpRec is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p['s_SPR-Y'] if p['s_SPR-Y'] is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p['s_LPR-Y'] if p['s_LPR-Y'] is defined else '—' }}</td>
-                </tr>
-                {% endif %}
+                {% elif p.kind == "receiver" %}
+                    <tr data-pos="{{ p.short_pos }}" data-kind="receiver" data-id="{{ p.id }}" style="display:none">
+                        <td class="pos-badge">{{ p.short_pos }}</td>
+                        <td>{{ p.FirstName }} {{ p.LastName }}</td>
+                        <td>{{ p.TM }}</td>
+                        <td class="stat-real">{{ p.RecYards if p.RecYards is defined else '—' }}</td>
+                        <td class="stat-real">{{ p.RecTDs if p.RecTDs is defined else '—' }}</td>
+                        <td class="stat-real">{{ p['s_Rec%'] if p['s_Rec%'] is defined else '—' }}</td>
+                        <td class="stat-strat" style="display:none">{{ p.s_YpRec if p.s_YpRec is defined else '—' }}</td>
+                        <td class="stat-strat" style="display:none">{{ p['s_SPR-Y'] if p['s_SPR-Y'] is defined else '—' }}</td>
+                        <td class="stat-strat" style="display:none">{{ p['s_LPR-Y'] if p['s_LPR-Y'] is defined else '—' }}</td>
+                    </tr>
+                    {% elif p.kind == "dlineoline" %}
+                    <tr data-pos="{{ p.short_pos }}" data-kind="dlineoline" data-id="{{ p.id }}" style="display:none">
+                        <td class="pos-badge">{{ p.short_pos }}</td>
+                        <td>{{ p.name }}</td>
+                        <td>{{ p.Team }}</td>
+                        <td class="stat-real">{{ p.s_YdspPlay if p.s_YdspPlay is defined else '—' }}</td>
+                        <td class="stat-real">{{ p['s_Fum%'] if p['s_Fum%'] is defined else '—' }}</td>
+                        <td class="stat-real">{{ p['s_Int%'] if p.s_QBWRFum is defined else '—' }}</td>
+                        <td class="stat-strat" style="display:none">{{ p.s_OLRun if p.s_OLRun is defined else '—' }}</td>
+                        <td class="stat-strat" style="display:none">{{ p.s_OLPass if p.s_OLPass is defined else '—' }}</td>
+                        <td class="stat-strat" style="display:none">{{ p.s_QBWRFum if p.s_QBWRFum is defined else '—' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr data-pos="{{ p.short_pos }}" data-kind="special" data-id="{{ p.id }}" style="display:none">
+                        <td class="pos-badge">{{ p.short_pos }}</td>
+                        <td>{{ p.name }}</td>
+                        <td>{{ p.Team }}</td>
+                        <td class="stat-real">{{ p.s_KO_Avg if p.s_KO_Avg is defined else '—' }}</td>
+                        <td class="stat-real">{{ p.s_PR_Avg if p.s_X_FG33 is defined else '—' }}</td>
+                        <td class="stat-real">{{ p.s_KickCoverage if p.s_KickCoverage is defined else '—' }}</td>
+                        <td class="stat-strat" style="display:none">{{ p.s_K_XP if p.s_K_XP is defined else '—' }}</td>
+                        <td class="stat-strat" style="display:none">{{ p.s_PR_Avg if p.s_X_FG33 is defined else '—' }}</td>
+                        <td class="stat-strat" style="display:none">{{ p.s_P_Avg if p.s_P_Avg is defined else '—' }}</td>
+                    </tr>
+                    {% endif %}
               {% endfor %}
           </tbody>
     </table>
@@ -783,32 +835,6 @@ function switchStatView(view) {
 </div>
 
 </div>
-
-<script>
-  function filterPos(btn, pos) {
-    document.querySelectorAll('.btn-pos').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-
-    const isPasser   = (pos === 'QB');
-    const isRusher   = (pos === 'HB' || pos === 'HB');
-    const isReceiver = (pos === 'TE' || pos === 'WR');
-    const isAll      = (pos === 'ALL');
-
-    // show correct header
-    document.getElementById('passing-head').style.display   = (isPasser || isAll) ? '' : 'none';
-    document.getElementById('rushing-head').style.display   = isRusher ? '' : 'none';
-    document.getElementById('receiving-head').style.display = isReceiver ? '' : 'none';
-
-    // filter rows
-    document.querySelectorAll('#playerBody tr').forEach(row => {
-        if (isAll) {
-            row.style.display = '';
-        } else {
-            row.style.display = (row.dataset.pos === pos) ? '' : 'none';
-        }
-    });
-}
-</script>
 
 {% endblock %}
 

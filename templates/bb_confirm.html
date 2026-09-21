@@ -160,7 +160,7 @@ document.addEventListener('DOMContentLoaded', validateSelections);
       {% endfor %}
 
       {% for p in players %}
-        <input type="hidden" name="selected_player_ids" value="{{ p.get('ID') or p.get('id') }}">
+        <input type="hidden" name="selected_player_ids" value="{{ p.get('id') or p.get('ID') }}">
         {{ p.get('FirstName','') }} {{ p.get('LastName','') }}<br>
       {% endfor %}
 
@@ -219,12 +219,12 @@ document.addEventListener('DOMContentLoaded', validateSelections);
                 <input 
                     type="checkbox" 
                     class="pos-C" 
-                    id="player-{{ p.get('ID','') }}" 
+                    id="player-{{ p.get('id','') }}" 
                     name="selected_player_ids" 
-                    value="{{ p.get('ID','') }}" 
+                    value="{{ p.get('id','') }}" 
                     onchange="validateSelections()"
                 >
-                <label for="player-{{ p.get('ID','') }}">
+                <label for="player-{{ p.get('id','') }}">
                     {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
                 </label><br>
             {% endif %}
@@ -252,12 +252,12 @@ document.addEventListener('DOMContentLoaded', validateSelections);
                   <input 
                       type="checkbox" 
                       class="pos-1B" 
-                      id="player-{{ p.get('ID','') }}" 
+                      id="player-{{ p.get('id','') }}" 
                       name="selected_player_ids" 
-                      value="{{ p.get('ID','') }}" 
+                      value="{{ p.get('id','') }}" 
                       onchange="validateSelections()"
                   >
-                  <label for="player-{{ p.get('ID','') }}">
+                  <label for="player-{{ p.get('id','') }}">
                       {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
                   </label><br>
               {% endif %}
@@ -285,12 +285,12 @@ document.addEventListener('DOMContentLoaded', validateSelections);
                   <input 
                       type="checkbox" 
                       class="pos-2B" 
-                      id="player-{{ p.get('ID','') }}" 
+                      id="player-{{ p.get('id','') }}" 
                       name="selected_player_ids" 
-                      value="{{ p.get('ID','') }}" 
+                      value="{{ p.get('id','') }}" 
                       onchange="validateSelections()"
                   >
-                  <label for="player-{{ p.get('ID','') }}">
+                  <label for="player-{{ p.get('id','') }}">
                       {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
                   </label><br>
               {% endif %}
@@ -319,12 +319,12 @@ document.addEventListener('DOMContentLoaded', validateSelections);
                   <input 
                       type="checkbox" 
                       class="pos-3B" 
-                      id="player-{{ p.get('ID','') }}" 
+                      id="player-{{ p.get('id','') }}" 
                       name="selected_player_ids" 
-                      value="{{ p.get('ID','') }}" 
+                      value="{{ p.get('id','') }}" 
                       onchange="validateSelections()"
                   >
-                  <label for="player-{{ p.get('ID','') }}">
+                  <label for="player-{{ p.get('id','') }}">
                       {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
                   </label><br>
               {% endif %}
@@ -353,12 +353,12 @@ document.addEventListener('DOMContentLoaded', validateSelections);
                   <input 
                       type="checkbox" 
                       class="pos-SS" 
-                      id="player-{{ p.get('ID','') }}" 
+                      id="player-{{ p.get('id','') }}" 
                       name="selected_player_ids" 
-                      value="{{ p.get('ID','') }}" 
+                      value="{{ p.get('id','') }}" 
                       onchange="validateSelections()"
                   >
-                  <label for="player-{{ p.get('ID','') }}">
+                  <label for="player-{{ p.get('id','') }}">
                       {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
                   </label><br>
               {% endif %}
@@ -386,12 +386,12 @@ document.addEventListener('DOMContentLoaded', validateSelections);
                   <input 
                       type="checkbox" 
                       class="pos-LF" 
-                      id="player-{{ p.get('ID','') }}" 
+                      id="player-{{ p.get('id','') }}" 
                       name="selected_player_ids" 
-                      value="{{ p.get('ID','') }}" 
+                      value="{{ p.get('id','') }}" 
                       onchange="validateSelections()"
                   >
-                  <label for="player-{{ p.get('ID','') }}">
+                  <label for="player-{{ p.get('id','') }}">
                       {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
                   </label><br>
               {% endif %}
@@ -419,12 +419,12 @@ document.addEventListener('DOMContentLoaded', validateSelections);
                   <input 
                       type="checkbox" 
                       class="pos-CF" 
-                      id="player-{{ p.get('ID','') }}" 
+                      id="player-{{ p.get('id','') }}" 
                       name="selected_player_ids" 
-                      value="{{ p.get('ID','') }}" 
+                      value="{{ p.get('id','') }}" 
                       onchange="validateSelections()"
                   >
-                  <label for="player-{{ p.get('ID','') }}">
+                  <label for="player-{{ p.get('id','') }}">
                       {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
                   </label><br>
               {% endif %}
@@ -453,12 +453,12 @@ document.addEventListener('DOMContentLoaded', validateSelections);
                   <input 
                       type="checkbox" 
                       class="pos-RF" 
-                      id="player-{{ p.get('ID','') }}" 
+                      id="player-{{ p.get('id','') }}" 
                       name="selected_player_ids" 
-                      value="{{ p.get('ID','') }}" 
+                      value="{{ p.get('id','') }}" 
                       onchange="validateSelections()"
                   >
-                  <label for="player-{{ p.get('ID','') }}">
+                  <label for="player-{{ p.get('id','') }}">
                       {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
                   </label><br>
               {% endif %}
@@ -487,12 +487,12 @@ document.addEventListener('DOMContentLoaded', validateSelections);
                   <input 
                       type="checkbox" 
                       class="pos-SP" 
-                      id="player-{{ p.get('ID','') }}" 
+                      id="player-{{ p.get('id','') }}" 
                       name="selected_player_ids" 
-                      value="{{ p.get('ID','') }}" 
+                      value="{{ p.get('id','') }}" 
                       onchange="validateSelections()"
                   >
-                  <label for="player-{{ p.get('ID','') }}">
+                  <label for="player-{{ p.get('id','') }}">
                       {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
                   </label><br>
               {% endif %}
@@ -520,12 +520,12 @@ document.addEventListener('DOMContentLoaded', validateSelections);
                   <input 
                       type="checkbox" 
                       class="pos-RP" 
-                      id="player-{{ p.get('ID','') }}" 
+                      id="player-{{ p.get('id','') }}" 
                       name="selected_player_ids" 
-                      value="{{ p.get('ID','') }}" 
+                      value="{{ p.get('id','') }}" 
                       onchange="validateSelections()"
                   >
-                  <label for="player-{{ p.get('ID','') }}">
+                  <label for="player-{{ p.get('id','') }}">
                       {{ p.get('FirstName','') }} {{ p.get('LastName','') }}
                   </label><br>
               {% endif %}

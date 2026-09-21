@@ -64,8 +64,11 @@ body::before {
     overflow:hidden;
     text-overflow:ellipsis;
 }
-.logo-wrap.active img  { filter:drop-shadow(0 0 10px #39ff14); }
-.logo-wrap.active .team-label { color:#39ff14; }
+.logo-wrap.active.human img  { filter:drop-shadow(0 0 10px #39ff14); }
+.logo-wrap.active.human .team-label { color:#39ff14; }
+
+.logo-wrap.active.ai img  { filter:drop-shadow(0 0 10px #ff4444); }
+.logo-wrap.active.ai .team-label { color:#ff4444; }
 
 /* ── Main 3-pane row ── */
 .draft-body { display:flex; height:calc(100vh - 155px); overflow:hidden; }
@@ -582,7 +585,7 @@ function switchStatView(view) {
 {% for row in logo_rows %}
 <div class="logo-strip">
   {% for team in row %}
-  <div class="logo-wrap" data-team="{{ team.name }}">
+  <div class="logo-wrap {{ 'human' if team.is_human else 'ai' }}" data-team="{{ team.name }}">
     <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/basketball/{{ team.name }}_bk.png"
          alt="{{ team.name }}"
          onerror="this.style.opacity='0.2'">
