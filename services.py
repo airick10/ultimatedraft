@@ -7,6 +7,7 @@ from functools import lru_cache
 from operator import itemgetter
 import requests
 import numpy as np
+from collections import Counter
 
 input_file_baseball_hitters = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltimebatters.json"
 input_file_baseball_pitchers = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltimepitchers.json"
@@ -30,7 +31,6 @@ FOOTBALL_POS_MAP = {
     'HB':  'HB',  # halfback → RB
     'QB':  'QB',
 }
-
 
 
 def _read_json(src: str):
@@ -264,7 +264,8 @@ def initial_save_baseball_meta_json(
         teams.append({
             "team_id": team_id,
             "team_name": team,
-            "type": "ai"
+            "type": "ai",
+            "AIFocus": random.randint(1, 16)
         })
         team_id += 1
 
@@ -328,7 +329,6 @@ def save_baseball_meta(draftname, meta):
     path = Path("drafts") / f"{draftname}_bb_meta.json"
     with open(path, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
-
 
 
 
@@ -455,7 +455,8 @@ def initial_save_basketball_meta_json(
         teams.append({
             "team_id": team_id,
             "team_name": team,
-            "type": "ai"
+            "type": "ai",
+            "AIFocus": random.randint(1, 16)
         })
         team_id += 1
 
@@ -748,7 +749,8 @@ def initial_save_football_meta_json(
         teams.append({
             "team_id": team_id,
             "team_name": team,
-            "type": "ai"
+            "type": "ai",
+            "AIFocus": random.randint(1, 16)
         })
         team_id += 1
 
@@ -1026,3 +1028,119 @@ def append_to_log(log_path, entry):
     log.append(entry)
     with open(log_path, "w", encoding="utf-8") as f:
         json.dump(log, f, indent=2)
+
+
+
+# -------- AI FUNCTIONS -----------------------------------------------------
+
+SHORT_POS_TO_SLOT_BB = {
+    'C': 'C', '1B': '1B', '2B': '2B', '3B': '3B', 'SS': 'SS',
+    'LF': 'LF', 'CF': 'CF', 'RF': 'RF', 'SP': 'S', 'RP': 'R',
+}
+
+SHORT_POS_TO_SLOT_FB = {
+    'QB': 'QB', 'HB': 'HB', 'FB': 'FB', 'TE': 'TE', 'WR': 'WR',
+    'DO': 'Def', 'KP': 'Special',
+}
+
+HB_FB_OVERFLOW = {'HB': 'FB', 'FB': 'HB'}
+
+SHORT_POS_TO_SLOT_BK = {
+    'C': 'C', 'F': 'F', 'G': 'G',
+}
+
+def assign_picks_to_slots_bb(roster_slots, team_picks):
+    """
+    Match each drafted player (in draft order) to a roster slot by position.
+    roster_slots: template list, e.g. ["C","C","1B",...,"UT","UT",...,"S","S",...,"R","R",...]
+    team_picks: this team's log entries, in the order they were drafted.
+    Returns a list the same length as roster_slots — each entry is either
+    the matching log entry dict, or None if that slot is still open.
+    """
+    assigned = [None] * len(roster_slots)
+    open_by_label = {}
+    for i, label in enumerate(roster_slots):
+        open_by_label.setdefault(label, []).append(i)
+
+    for pick in team_picks:
+        slot_label = SHORT_POS_TO_SLOT_BB.get(pick.get('pos', ''), 'UT')
+        target = None
+
+        if open_by_label.get(slot_label):
+            target = open_by_label[slot_label].pop(0)
+        elif slot_label not in ('S', 'R') and open_by_label.get('UT'):
+            target = open_by_label['UT'].pop(0)
+        else:
+            for label, indices in open_by_label.items():
+                if indices:
+                    target = indices.pop(0)
+                    break
+
+        if target is not None:
+            assigned[target] = pick
+
+    return assigned
+
+
+def assign_picks_to_slots_bk(roster_slots, team_picks):
+    """
+    Same pattern as assign_picks_to_slots_bb. C/F/G are their own buckets;
+    once a position's dedicated slots are full, the pick overflows into UT,
+    then falls back to any open slot as a last resort.
+    """
+    assigned = [None] * len(roster_slots)
+    open_by_label = {}
+    for i, label in enumerate(roster_slots):
+        open_by_label.setdefault(label, []).append(i)
+
+    for pick in team_picks:
+        slot_label = SHORT_POS_TO_SLOT_BK.get(pick.get('pos', ''), 'UT')
+        target = None
+
+        if open_by_label.get(slot_label):
+            target = open_by_label[slot_label].pop(0)
+        elif slot_label != 'UT' and open_by_label.get('UT'):
+            target = open_by_label['UT'].pop(0)
+        else:
+            for label, indices in open_by_label.items():
+                if indices:
+                    target = indices.pop(0)
+                    break
+
+        if target is not None:
+            assigned[target] = pick
+
+    return assigned
+
+
+
+def assign_picks_to_slots_fb(roster_slots, team_picks):
+    """
+    Same pattern as assign_picks_to_slots_bb. QB/TE/WR/Def/Special are each
+    their own strict bucket. HB and FB share a pool -- a pick overflows into
+    the other's open slot before falling back to any open slot of any kind,
+    so a pick is never dropped visually.
+    """
+    assigned = [None] * len(roster_slots)
+    open_by_label = {}
+    for i, label in enumerate(roster_slots):
+        open_by_label.setdefault(label, []).append(i)
+
+    for pick in team_picks:
+        slot_label = SHORT_POS_TO_SLOT_FB.get(pick.get('pos', ''), '')
+        target = None
+
+        if slot_label and open_by_label.get(slot_label):
+            target = open_by_label[slot_label].pop(0)
+        elif slot_label in HB_FB_OVERFLOW and open_by_label.get(HB_FB_OVERFLOW[slot_label]):
+            target = open_by_label[HB_FB_OVERFLOW[slot_label]].pop(0)
+        else:
+            for label, indices in open_by_label.items():
+                if indices:
+                    target = indices.pop(0)
+                    break
+
+        if target is not None:
+            assigned[target] = pick
+
+    return assigned

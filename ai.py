@@ -1,0 +1,446 @@
+"""
+ai.py — AI drafting logic (port of the original CLI's aipicks.py).
+
+Currently baseball only. Basketball and football AI will follow the same
+shape once their position-eligibility rules are worked out.
+"""
+
+import random
+
+from .services import assign_picks_to_slots_bb, assign_picks_to_slots_bk
+
+
+# ============================================================
+# Raw-data parsers
+# The old aipicks.py assumed fields (DP1/DP2/DP3, Bat, Throw, Role, Price)
+# that don't exist in this project's data. These derive equivalent values
+# from the real fields (s_fielding, Bats, Throws, s_endurance, s_sal).
+# ============================================================
+
+def parse_salary(raw):
+    """'$11,150,000 ' -> 11150000.0. Returns 0.0 if blank/unparseable."""
+    if raw is None:
+        return 0.0
+    cleaned = str(raw).replace('$', '').replace(',', '').strip()
+    try:
+        return float(cleaned)
+    except ValueError:
+        return 0.0
+
+
+POS_ABBR_TO_CODE = {
+    'c': '2', '1b': '3', '2b': '4', '3b': '5',
+    'ss': '6', 'lf': '7', 'cf': '8', 'rf': '9',
+}
+
+def parse_fielding(hitter):
+    """'rf-1(-2)e6 1b-4e7 cf-2e6' -> ('9', '3', '8')  (DP1, DP2, DP3)."""
+    raw = hitter.get('s_fielding', '') or ''
+    tokens = raw.strip().split()
+    codes = []
+    for tok in tokens[:3]:
+        abbr = tok.split('-')[0].strip().lower()
+        codes.append(POS_ABBR_TO_CODE.get(abbr, ''))
+    while len(codes) < 3:
+        codes.append('')
+    return codes[0], codes[1], codes[2]
+
+
+def bat_throw_code(value):
+    """'Left' -> 'L', 'Right' -> 'R', 'Switch' -> 'S'."""
+    if not value:
+        return ''
+    return value.strip()[0].upper()
+
+
+def pitcher_role(pitcher):
+    """'S(7)' -> 'S' (starter). 'R...' / 'C...' -> 'R' (reliever, closer counts as reliever)."""
+    raw = pitcher.get('s_endurance', '') or ''
+    first = raw.strip()[:1].upper()
+    if first == 'S':
+        return 'S'
+    if first in ('R', 'C'):
+        return 'R'
+    return ''
+
+
+# ============================================================
+# Position eligibility
+# Port of aipicks.py's eligiblePosition(). Reuses assign_picks_to_slots_bb's
+# open-slot bookkeeping rather than duplicating it -- whatever slot came
+# back None from that function is, by definition, still open.
+# ============================================================
+
+SLOT_LABEL_TO_CODE_BB = {
+    'C': '2', '1B': '3', '2B': '4', '3B': '5', 'SS': '6',
+    'LF': '7', 'CF': '8', 'RF': '9', 'UT': '10', 'S': '1', 'R': '11',
+}
+
+
+def open_position_lottery(roster_slots, team_picks):
+    """
+    Old aipicks.py-style position codes for every roster slot still open,
+    one entry per open slot (duplicates included -- a team missing two
+    catchers gets '2' twice, which naturally weights the AI's random pick
+    toward positions with more open slots, same as the original).
+    """
+    assigned = assign_picks_to_slots_bb(roster_slots, team_picks)
+    lottery = []
+    for filled, label in zip(assigned, roster_slots):
+        if filled is None:
+            code = SLOT_LABEL_TO_CODE_BB.get(label)
+            if code:
+                lottery.append(code)
+    return lottery
+
+
+def eligible_position_bb(roster_slots, team_picks, ai_focus):
+    """
+    Port of aipicks.py's eligiblePosition(). Returns [primary_code, sp_open, rp_open] --
+    primary_code is '0' if only pitching slots remain open.
+    """
+    lottery = open_position_lottery(roster_slots, team_picks)
+    selected = ['0', 0, 0]
+
+    if '1' in lottery:
+        selected[1] = 1
+    if '11' in lottery:
+        selected[2] = 11
+
+    non_pitching = [c for c in lottery if c not in ('1', '11')]
+    if non_pitching:
+        primary = random.choice(non_pitching)
+        if ai_focus == 15:  # "Up the Middle" -- bias toward C/2B/SS/CF
+            up_middle = [c for c in non_pitching if c in ('2', '4', '6', '8')]
+            if up_middle:
+                primary = random.choice(up_middle)
+        selected[0] = primary
+
+    return selected
+
+
+# ============================================================
+# Selection engine
+# Port of aipicks.py's check_functions dict, aiSelectSnippet(), and
+# topFourGrabs(). Position-eligibility checks use the derived fields above
+# instead of the missing DP1/DP2/DP3/Bat/Throw/Role fields.
+# ============================================================
+
+def check_functions_bb(def_check):
+    def dp_in(p, code):
+        return code in parse_fielding(p)
+
+    table = {
+        0:  lambda p: True,
+        1:  lambda p: pitcher_role(p) == 'S',
+        2:  lambda p: dp_in(p, '2'),
+        3:  lambda p: dp_in(p, '3'),
+        4:  lambda p: dp_in(p, '4'),
+        5:  lambda p: dp_in(p, '5'),
+        6:  lambda p: dp_in(p, '6'),
+        7:  lambda p: dp_in(p, '7'),
+        8:  lambda p: dp_in(p, '8'),
+        9:  lambda p: dp_in(p, '9'),
+        10: lambda p: True,  # UT -- any hitter fits
+        11: lambda p: pitcher_role(p) == 'R',
+        12: lambda p: True,  # old "position-player defense" check (DR1) has no equivalent field -- no filter for now
+        13: lambda p: bat_throw_code(p.get('Bats')) == 'L' or bat_throw_code(p.get('Throws')) == 'L',
+        14: lambda p: parse_fielding(p)[0] in ('2', '4', '6', '8'),
+    }
+    return table.get(def_check, lambda p: True)
+
+
+def ai_select_snippet_bb(playerpool, threshold, def_check, avg_salary):
+    """
+    playerpool must already be sorted by the desired stat and filtered to
+    undrafted players (team_id == 0). Returns a player's id, or None.
+    """
+    check = check_functions_bb(def_check)
+    counter = 0
+    for player in playerpool:
+        if not check(player):
+            continue
+        salary = parse_salary(player.get('s_sal'))
+        if salary > avg_salary or salary < 600:
+            continue
+        if threshold < 0 or counter > threshold:
+            return player.get('id')
+        counter += 1
+    return None
+
+
+def top_four_grabs_bb(kind, playerpool, position, direction, avg_salary):
+    """kind: 'H' or 'P'. position: from eligible_position_bb. direction: for
+    pitchers, 1 prefers an open SP slot, 11 prefers an open RP slot."""
+    if kind == 'P':
+        if direction == 1 and position[1] == 1:
+            def_check = 1
+        elif direction == 11 and position[2] == 11:
+            def_check = 11
+        else:
+            def_check = 0
+    else:
+        def_check = position[0]
+
+    roll = random.randrange(100)
+    threshold = -1 if roll < 40 else 0 if roll < 70 else 1 if roll < 90 else 2
+
+    return ai_select_snippet_bb(playerpool, threshold, def_check, avg_salary)
+
+
+def ai_sort_pool_bb(stat_key, players):
+    """Highest-better, except ERA/WHIP which sort ascending."""
+    ascending = stat_key in ('p_earned_run_avg', 'p_whip')
+    if stat_key == 's_sal':
+        keyfunc = lambda r: parse_salary(r.get('s_sal'))
+    else:
+        keyfunc = lambda r: float(r.get(stat_key, 0) or 0)
+    return sorted(players, key=keyfunc, reverse=not ascending)
+
+
+# ============================================================
+# Top-level: AIFocus archetypes and the aiSelect() equivalent
+# ============================================================
+
+AI_FOCUS_TABLE = {
+    1:  {'keys': ['s_sal']*6, 'focus': 0, 'mode': 'H'},
+    2:  {'keys': ['b_hr','b_slugging_perc','b_rbi','s_sal','p_so','p_earned_run_avg'], 'focus': 0, 'mode': 'H'},
+    3:  {'keys': ['s_sal','p_w','p_earned_run_avg','s_sal','b_onbase_perc','b_hr'], 'focus': 0, 'mode': 'P'},
+    4:  {'keys': ['b_batting_avg','b_sb','s_sal','s_sal','p_whip','p_earned_run_avg'], 'focus': 0, 'mode': 'H'},
+    5:  {'keys': ['s_sal','b_h','b_batting_avg','s_sal','p_w','p_so'], 'focus': 12, 'mode': 'H'},
+    6:  {'keys': ['s_sal','b_sb','b_batting_avg','s_sal','p_w','p_so'], 'focus': 12, 'mode': 'H'},
+    7:  {'keys': ['s_sal','p_sv','p_earned_run_avg','s_sal','b_hr','b_rbi'], 'focus': 11, 'mode': 'P'},
+    8:  {'keys': ['p_whip','p_earned_run_avg','s_sal','s_sal','b_batting_avg','b_rbi'], 'focus': 0, 'mode': 'P'},
+    9:  {'keys': ['b_sb','b_onbase_perc','s_sal','s_sal','p_whip','p_w'], 'focus': 0, 'mode': 'H'},
+    10: {'keys': ['b_doubles','b_slugging_perc','b_triples','s_sal','p_so','p_whip'], 'focus': 0, 'mode': 'H'},
+    11: {'keys': ['b_onbase_perc','b_batting_avg','s_sal','s_sal','p_whip','p_earned_run_avg'], 'focus': 0, 'mode': 'H'},
+    12: {'keys': ['p_so','p_whip','s_sal','s_sal','b_hr','b_slugging_perc'], 'focus': 0, 'mode': 'P'},
+    13: {'keys': ['s_sal','b_batting_avg','b_slugging_perc','s_sal','p_earned_run_avg','p_whip'], 'focus': 13, 'mode': 'H'},
+    14: {'keys': ['s_sal','b_batting_avg','b_hr','s_sal','p_earned_run_avg','p_w'], 'focus': 0, 'mode': 'H'},
+    15: {'keys': ['s_sal','b_batting_avg','b_hr','s_sal','p_earned_run_avg','p_w'], 'focus': 14, 'mode': 'H'},
+    16: {'keys': ['b_rbi','b_slugging_perc','s_sal','s_sal','p_whip','p_so'], 'focus': 0, 'mode': 'H'},
+}
+
+
+def first_rounds_bb(hitters_pool, pitchers_pool, avg_salary):
+    """
+    Port of aipicks.py's firstRounds() -- early-round 'best available',
+    no position filter, 30% hitter / 70% pitcher split. Uses the real
+    avg_salary passed in rather than the original's hardcoded $20,000,
+    which was tuned to a much smaller salary scale than this data uses.
+    """
+    no_position = ['0', 0, 0]
+    if random.randrange(100) < 30:
+        pool = ai_sort_pool_bb('s_sal', hitters_pool)
+        return top_four_grabs_bb('H', pool, no_position, 0, avg_salary)
+    else:
+        pool = ai_sort_pool_bb('s_sal', pitchers_pool)
+        return top_four_grabs_bb('P', pool, no_position, 0, avg_salary)
+
+
+def auto_select_hitter_bb(position, hitters_pool, pitchers_pool, round_num, focus, keys, avg_salary):
+    """Port of aipicks.py's autoSelectHitter()."""
+    side_threshold = 90 if round_num < 3 else 50
+    side = random.randrange(100)
+
+    if side < side_threshold and round_num < 3:
+        return first_rounds_bb(hitters_pool, pitchers_pool, avg_salary)
+
+    if side < side_threshold:
+        key_str = random.choices(keys[0:3], weights=[70, 20, 10])[0]
+        pool = ai_sort_pool_bb(key_str, hitters_pool)
+        return top_four_grabs_bb('H', pool, position, focus, avg_salary)
+
+    key_str = random.choices(keys[3:6], weights=[70, 20, 10])[0]
+    pool = ai_sort_pool_bb(key_str, pitchers_pool)
+    direction = 1 if (random.randrange(100) < 80 and position[1] > 0) else 11
+    return top_four_grabs_bb('P', pool, position, direction, avg_salary)
+
+
+def auto_select_pitcher_bb(position, hitters_pool, pitchers_pool, round_num, focus, keys, avg_salary):
+    """Port of aipicks.py's autoSelectPitcher()."""
+    side_threshold = 90 if round_num < 3 else 50
+    side = random.randrange(100)
+
+    if side < side_threshold and round_num < 3:
+        return first_rounds_bb(hitters_pool, pitchers_pool, avg_salary)
+
+    if side < side_threshold:
+        key_str = random.choices(keys[0:3], weights=[70, 20, 10])[0]
+        pool = ai_sort_pool_bb(key_str, pitchers_pool)
+        if random.randrange(100) < 80 and position[1] > 0:
+            direction = 0 if focus == 13 else 1
+        else:
+            direction = 11
+        return top_four_grabs_bb('P', pool, position, direction, avg_salary)
+
+    key_str = random.choices(keys[3:6], weights=[70, 20, 10])[0]
+    pool = ai_sort_pool_bb(key_str, hitters_pool)
+    return top_four_grabs_bb('H', pool, position, focus, avg_salary)
+
+
+def ai_select_bb(team, roster_slots, team_picks, all_players, round_num, cap, salary_cap_enabled):
+    """
+    Port of aipicks.py's aiSelect() for one team's single pick.
+    all_players: the full draft's player list (same object routes.py already
+    loads from the draft JSON), drafted and undrafted alike -- used both to
+    find eligible players and to total up what this team has already spent.
+    Returns a player id, or None if nothing eligible was found.
+    """
+    ai_focus = team.get('AIFocus', 1)
+    config = AI_FOCUS_TABLE.get(ai_focus, AI_FOCUS_TABLE[1])
+    position = eligible_position_bb(roster_slots, team_picks, ai_focus)
+
+    hitters_pool  = [p for p in all_players if p.get('kind') == 'hitter'  and p.get('team_id', 0) == 0]
+    pitchers_pool = [p for p in all_players if p.get('kind') == 'pitcher' and p.get('team_id', 0) == 0]
+
+    slots_left = max(len(roster_slots) - len(team_picks), 1)
+
+    if salary_cap_enabled:
+        spent = sum(
+            parse_salary(p.get('s_sal'))
+            for p in all_players
+            if p.get('team_id', 0) == team['team_id']
+        )
+        budget_mode = random.randrange(100) < 50 and round_num > 7
+        if round_num > 18 or budget_mode:
+            remaining = parse_salary(cap) - spent
+            avg_salary = remaining / slots_left if remaining > 0 else 0
+        else:
+            avg_salary = float('inf')
+    else:
+        avg_salary = float('inf')
+
+    if config['mode'] == 'H':
+        return auto_select_hitter_bb(position, hitters_pool, pitchers_pool, round_num, config['focus'], config['keys'], avg_salary)
+    else:
+        return auto_select_pitcher_bb(position, hitters_pool, pitchers_pool, round_num, config['focus'], config['keys'], avg_salary)
+
+
+# ============================================================
+# BASKETBALL
+# ============================================================
+
+def open_position_lottery_bk(roster_slots, team_picks):
+    """Open slot labels for this team, one entry per open slot (duplicates included)."""
+    assigned = assign_picks_to_slots_bk(roster_slots, team_picks)
+    return [label for filled, label in zip(assigned, roster_slots) if filled is None]
+
+
+def eligible_position_bk(roster_slots, team_picks):
+    """Returns a random open slot label ('C'/'F'/'G'/'UT'), or None if the roster is full."""
+    open_labels = open_position_lottery_bk(roster_slots, team_picks)
+    if not open_labels:
+        return None
+    return random.choice(open_labels)
+
+
+def check_functions_bk(code):
+    table = {
+        0:    lambda p: True,
+        'C':  lambda p: p.get('Pos') == 'C',
+        'F':  lambda p: p.get('Pos') == 'F',
+        'G':  lambda p: p.get('Pos') == 'G',
+        'UT': lambda p: True,
+        11:   lambda p: float(p.get('Omade', 0) or 0) > 10,
+        12:   lambda p: float(p.get('Dsteal', 0) or 0) > 8 or p.get('Block') not in (None, ''),
+        13:   lambda p: float(p.get('fg3_pct', 0) or 0) >= 0.35,
+        14:   lambda p: float(p.get('rbspgm', 0) or 0) >= 6,
+    }
+    return table.get(code, lambda p: True)
+
+
+def combined_check_bk(position_code, focus_code):
+    """Position AND focus both have to pass."""
+    pos_fn   = check_functions_bk(position_code)
+    focus_fn = check_functions_bk(focus_code) if focus_code else (lambda p: True)
+    return lambda p: pos_fn(p) and focus_fn(p)
+
+
+def ai_select_snippet_bk(playerpool, threshold, position_code, focus_code, avg_salary):
+    check = combined_check_bk(position_code, focus_code)
+    counter = 0
+    for player in playerpool:
+        if not check(player):
+            continue
+        salary = parse_salary(player.get('Salary'))
+        if salary > avg_salary or salary < 600:
+            continue
+        if threshold < 0 or counter > threshold:
+            return player.get('id')
+        counter += 1
+    return None
+
+
+def top_four_grabs_bk(playerpool, position_code, focus_code, avg_salary):
+    roll = random.randrange(100)
+    threshold = -1 if roll < 40 else 0 if roll < 70 else 1 if roll < 90 else 2
+    return ai_select_snippet_bk(playerpool, threshold, position_code, focus_code, avg_salary)
+
+
+def ai_sort_pool_bk(stat_key, players):
+    """All basketball stats are higher-is-better, per confirmation."""
+    if stat_key == 'Salary':
+        keyfunc = lambda r: parse_salary(r.get('Salary'))
+    else:
+        keyfunc = lambda r: float(r.get(stat_key, 0) or 0)
+    return sorted(players, key=keyfunc, reverse=True)
+
+
+AI_FOCUS_TABLE_BK = {
+    1:  {'keys': ['Salary']*6, 'focus': 0},
+    2:  {'keys': ['Omade','fg3_pct','PassDazz','Salary','ptspgm','Shoot'], 'focus': 0},
+    3:  {'keys': ['Salary','rbspgm','Shoot','Salary','fg_pct','Omade'], 'focus': 0},
+    4:  {'keys': ['fg3_pct','rbspgm','Salary','Salary','DPass1','PassDazz'], 'focus': 0},
+    5:  {'keys': ['Salary','astpgm','fg_pct','Salary','DPass1','rbspgm'], 'focus': 12},
+    6:  {'keys': ['Salary','astpgm','fg_pct','Salary','DPass1','rbspgm'], 'focus': 12},
+    7:  {'keys': ['Salary','Imade','Shoot','Salary','Omade','astpgm'], 'focus': 11},
+    8:  {'keys': ['ptspgm','DPass1','Salary','Salary','fg_pct','astpgm'], 'focus': 0},
+    9:  {'keys': ['Imade','astpgm','ptspgm','Salary','PassDazz','ptspgm'], 'focus': 0},
+    10: {'keys': ['astpgm','fg3_pct','Imade','Salary','ptspgm','DPass1'], 'focus': 0},
+    11: {'keys': ['ptspgm','fg3_pct','Salary','Salary','PassDazz','Shoot'], 'focus': 0},
+    12: {'keys': ['ptspgm','DPass1','Salary','Salary','Omade','astpgm'], 'focus': 0},
+    13: {'keys': ['Salary','rbspgm','fg3_pct','Salary','Shoot','DPass1'], 'focus': 13},
+    14: {'keys': ['Salary','Omade','ptspgm','Salary','Shoot','PassDazz'], 'focus': 0},
+    15: {'keys': ['Salary','Omade','ptspgm','Salary','Shoot','PassDazz'], 'focus': 14},
+    16: {'keys': ['PassDazz','fg3_pct','Salary','Salary','DPass1','ptspgm'], 'focus': 0},
+}
+
+
+def auto_select_bk(position_code, pool, focus_code, keys, avg_salary):
+    """Single-pool version of autoSelectHitter -- the side-roll picks between
+    two stat triplets purely for variety, since there's only one pool either way."""
+    side = random.randrange(100)
+    triplet = keys[0:3] if side < 50 else keys[3:6]
+    key_str = random.choices(triplet, weights=[70, 20, 10])[0]
+    sorted_pool = ai_sort_pool_bk(key_str, pool)
+    return top_four_grabs_bk(sorted_pool, position_code, focus_code, avg_salary)
+
+
+def ai_select_bk(team, roster_slots, team_picks, all_players, round_num, cap, salary_cap_enabled):
+    """Port of aiSelect() for basketball -- one team's single pick."""
+    ai_focus = team.get('AIFocus', 1)
+    config = AI_FOCUS_TABLE_BK.get(ai_focus, AI_FOCUS_TABLE_BK[1])
+    position_code = eligible_position_bk(roster_slots, team_picks)
+    if position_code is None:
+        return None  # roster already full
+
+    pool = [p for p in all_players if p.get('team_id', 0) == 0]
+    slots_left = max(len(roster_slots) - len(team_picks), 1)
+
+    if salary_cap_enabled:
+        spent = sum(
+            parse_salary(p.get('Salary'))
+            for p in all_players
+            if p.get('team_id', 0) == team['team_id']
+        )
+        budget_mode = random.randrange(100) < 50 and round_num > 7
+        if round_num > 8 or budget_mode:  # basketball rosters are 10 slots, not 25 -- budget mode kicks in earlier
+            remaining = parse_salary(cap) - spent
+            avg_salary = remaining / slots_left if remaining > 0 else 0
+        else:
+            avg_salary = float('inf')
+    else:
+        avg_salary = float('inf')
+
+    return auto_select_bk(position_code, pool, config['focus'], config['keys'], avg_salary)

@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, abort, current_app
+from .ai import ai_select_bb, ai_select_bk, parse_salary
 from .services import (
     load_baseball,
     load_basketball,
@@ -38,7 +39,10 @@ from .services import (
     save_basketball_meta,
     load_football_meta,
     save_football_meta,
-    append_to_log
+    append_to_log,
+    assign_picks_to_slots_bb,
+    assign_picks_to_slots_bk,
+    assign_picks_to_slots_fb
 )
 from datetime import datetime
 import random
@@ -96,34 +100,40 @@ def bb_load():
         else:
             ai_set.append(team.get("team_name"))
 
-    # build unified team list and logo rows
-    all_teams = [{"name": t["team_name"], "is_human": t["type"] == "human"} for t in meta["teams"]]
-    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
-
     # baseball roster slots
     roster_slots = ["C", "C", "1B", "2B", "SS", "3B", "LF", "CF", "RF",
                     "UT", "UT", "UT", "UT", "UT", "UT",
                     "S", "S", "S", "S", "S",
                     "R", "R", "R", "R", "R"]
 
-    # build rosters from log
+    all_teams = [
+        {"team_id": t["team_id"], "name": t["team_name"], "is_human": t["type"] == "human"}
+        for t in meta["teams"]
+    ]
+    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
+
     rosters = {}
     for entry in log:
-        tid = entry['team_id']
-        if tid not in rosters:
-            rosters[tid] = []
-        rosters[tid].append(entry)
+        rosters.setdefault(entry['team_id'], []).append(entry)
+
+    roster_assignments = {
+        t["team_id"]: assign_picks_to_slots_bb(roster_slots, rosters.get(t["team_id"], []))
+        for t in meta["teams"]
+    }
 
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
     current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
     current_team_type = current_team_obj['type'] if current_team_obj else 'human'
+    # if the draft opens with an AI team on the clock, get it picking
+    if current_team_type == 'ai':
+        socketio.start_background_task(run_ai_picks_bb, draftname)
 
     return render_template(
         "bbdraft.html",
         all_teams=all_teams,
         logo_rows=logo_rows,
         roster_slots=roster_slots,
-        rosters=rosters,
+        roster_assignments=roster_assignments,
         num_teams=meta.get("num_teams", 0),
         human_teams=human_teams,
         ai_set=ai_set,
@@ -242,33 +252,41 @@ def bb_draft():
     with open(meta_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
 
-    all_teams = [{"name": t["team_name"], "is_human": t["type"] == "human"} for t in meta["teams"]]
+    all_teams = [
+        {"team_id": t["team_id"], "name": t["team_name"], "is_human": t["type"] == "human"}
+        for t in meta["teams"]
+    ]
     logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
 
     rosters = {}
     for entry in draft_log:
-        tid = entry['team_id']
-        if tid not in rosters:
-            rosters[tid] = []
-        rosters[tid].append(entry)
+        rosters.setdefault(entry['team_id'], []).append(entry)
+
+    roster_assignments = {
+        t["team_id"]: assign_picks_to_slots_bb(roster_slots, rosters.get(t["team_id"], []))
+        for t in meta["teams"]
+    }
 
     # current picking team
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
     current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
     current_team_type = current_team_obj['type'] if current_team_obj else 'human'
+    # if the draft opens with an AI team on the clock, get it picking
+    if current_team_type == 'ai':
+        socketio.start_background_task(run_ai_picks_bb, draftname)
 
     return render_template(
         "bbdraft.html",
         all_teams=all_teams,
         logo_rows=logo_rows,
         roster_slots=roster_slots,
+        roster_assignments=roster_assignments,
         pool=pool,
         cap=cap,
         draftname=draftname,
         players=people,
         draft_file=output_path,
         draft_log=draft_log,
-        rosters=rosters,
         current_team=current_team,
         current_team_type=current_team_type,
         sport="bb"
@@ -316,32 +334,38 @@ def bk_load():
         else:
             ai_set.append(team.get("team_name"))
 
-    # build unified team list and logo rows
-    all_teams = [{"name": t["team_name"], "is_human": t["type"] == "human"} for t in meta["teams"]]
+    # basketball roster slots
+    roster_slots = ["C", "F", "F", "G", "G", "UT", "UT", "UT", "UT", "UT"]
+
+    all_teams = [
+        {"team_id": t["team_id"], "name": t["team_name"], "is_human": t["type"] == "human"}
+        for t in meta["teams"]
+    ]
     logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
 
-    # basketball roster slots
-    roster_slots = ["C", "C", "PF", "PF", "SF", "SF", "SG", "SG", "PG", "PG"]
-
-    # build rosters from log
     rosters = {}
     for entry in log:
-        tid = entry['team_id']
-        if tid not in rosters:
-            rosters[tid] = []
-        rosters[tid].append(entry)
+        rosters.setdefault(entry['team_id'], []).append(entry)
+
+    roster_assignments = {
+        t["team_id"]: assign_picks_to_slots_bk(roster_slots, rosters.get(t["team_id"], []))
+        for t in meta["teams"]
+    }
 
     # current picking team
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
     current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
     current_team_type = current_team_obj['type'] if current_team_obj else 'human'
 
+    if current_team_type == 'ai':
+        socketio.start_background_task(run_ai_picks_bk, draftname)
+
     return render_template(
         "bkdraft.html",
         all_teams=all_teams,
         logo_rows=logo_rows,
         roster_slots=roster_slots,
-        rosters=rosters,
+        roster_assignments=roster_assignments,
         num_teams=meta.get("num_teams", 0),
         human_teams=human_teams,
         ai_set=ai_set,
@@ -490,7 +514,7 @@ def bk_draft():
         people = [p for p in all_players if str(p.get("id")) in id_set]
 
     # roster slot labels
-    roster_slots = ["C", "C", "PF", "PF", "SF", "SF", "SG", "SG", "PG", "PG"]
+    roster_slots = ["C", "F", "F", "G", "G", "UT", "UT", "UT", "UT", "UT"]
 
     output_path = Path("drafts") / f"{draftname}_bk.json"
     meta_path   = Path("drafts") / f"{draftname}_bk_meta.json"
@@ -509,33 +533,41 @@ def bk_draft():
     with open(meta_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
 
-    all_teams = [{"name": t["team_name"], "is_human": t["type"] == "human"} for t in meta["teams"]]
+    all_teams = [
+        {"team_id": t["team_id"], "name": t["team_name"], "is_human": t["type"] == "human"}
+        for t in meta["teams"]
+    ]
     logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
 
     rosters = {}
     for entry in draft_log:
-        tid = entry['team_id']
-        if tid not in rosters:
-            rosters[tid] = []
-        rosters[tid].append(entry)
+        rosters.setdefault(entry['team_id'], []).append(entry)
+
+    roster_assignments = {
+        t["team_id"]: assign_picks_to_slots_bk(roster_slots, rosters.get(t["team_id"], []))
+        for t in meta["teams"]
+    }
 
     # current picking team
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
     current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
     current_team_type = current_team_obj['type'] if current_team_obj else 'human'
 
+    if current_team_type == 'ai':
+        socketio.start_background_task(run_ai_picks_bk, draftname)
+
     return render_template(
         "bkdraft.html",
         all_teams=all_teams,
         logo_rows=logo_rows,
         roster_slots=roster_slots,
+        roster_assignments=roster_assignments,
         pool=pool,
         cap=cap,
         draftname=draftname,
         players=people,
         draft_file=output_path,
         draft_log=draft_log,
-        rosters=rosters,
         current_team=current_team,
         current_team_type=current_team_type,
         sport="bk"
@@ -649,21 +681,24 @@ def fb_load():
         else:
             ai_set.append(team.get("team_name"))
 
-    # build unified team list and logo rows
-    all_teams = [{"name": t["team_name"], "is_human": t["type"] == "human"} for t in meta["teams"]]
-    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
-
     # football roster slots
     roster_slots = ["QB", "QB", "HB", "HB", "FB", "TE", "TE",
                     "WR", "WR", "WR", "WR", "Def", "Special"]
 
-    # build rosters from log
+    all_teams = [
+        {"team_id": t["team_id"], "name": t["team_name"], "is_human": t["type"] == "human"}
+        for t in meta["teams"]
+    ]
+    logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
+
     rosters = {}
     for entry in log:
-        tid = entry['team_id']
-        if tid not in rosters:
-            rosters[tid] = []
-        rosters[tid].append(entry)
+        rosters.setdefault(entry['team_id'], []).append(entry)
+
+    roster_assignments = {
+        t["team_id"]: assign_picks_to_slots_fb(roster_slots, rosters.get(t["team_id"], []))
+        for t in meta["teams"]
+    }
 
     # current picking team
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
@@ -675,7 +710,7 @@ def fb_load():
         all_teams=all_teams,
         logo_rows=logo_rows,
         roster_slots=roster_slots,
-        rosters=rosters,
+        roster_assignments=roster_assignments,
         num_teams=meta.get("num_teams", 0),
         human_teams=human_teams,
         ai_set=ai_set,
@@ -730,15 +765,20 @@ def fb_draft():
     with open(meta_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
 
-    all_teams = [{"name": t["team_name"], "is_human": t["type"] == "human"} for t in meta["teams"]]
+    all_teams = [
+        {"team_id": t["team_id"], "name": t["team_name"], "is_human": t["type"] == "human"}
+        for t in meta["teams"]
+    ]
     logo_rows = [all_teams[i:i+8] for i in range(0, len(all_teams), 8)]
 
     rosters = {}
     for entry in draft_log:
-        tid = entry['team_id']
-        if tid not in rosters:
-            rosters[tid] = []
-        rosters[tid].append(entry)
+        rosters.setdefault(entry['team_id'], []).append(entry)
+
+    roster_assignments = {
+        t["team_id"]: assign_picks_to_slots_fb(roster_slots, rosters.get(t["team_id"], []))
+        for t in meta["teams"]
+    }
 
     # current picking team
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
@@ -750,17 +790,201 @@ def fb_draft():
         all_teams=all_teams,
         logo_rows=logo_rows,
         roster_slots=roster_slots,
+        roster_assignments=roster_assignments,
         pool=pool,
         cap=cap,
         draftname=draftname,
         players=people,
         draft_file=output_path,
         draft_log=draft_log,
-        rosters=rosters,
         current_team=current_team,
         current_team_type=current_team_type,
         sport="fb"
     )
+
+
+# ------ AI CALLS (Baseball) -------------
+
+def make_ai_pick_bb(draftname):
+    """
+    Makes one AI-selected pick for whichever team is currently on the clock
+    -- AI team or a human whose timer expired. Returns the log entry dict,
+    or None if the draft is already full / something's missing.
+    """
+    roster_slots = ["C", "C", "1B", "2B", "SS", "3B", "LF", "CF", "RF",
+                    "UT", "UT", "UT", "UT", "UT", "UT",
+                    "S", "S", "S", "S", "S",
+                    "R", "R", "R", "R", "R"]
+
+    draft_path = Path("drafts") / f"{draftname}_bb.json"
+    log_path   = Path("drafts") / f"{draftname}_bb_log.json"
+
+    meta    = load_baseball_meta(draftname)
+    team_id = meta['current_team_id']
+    team    = get_team_by_id(meta, team_id)
+
+    if not team:
+        return None
+
+    total_slots = meta['num_teams'] * len(roster_slots)
+    if meta['current_pick'] > total_slots:
+        return None
+
+    with open(draft_path, "r", encoding="utf-8") as f:
+        players = json.load(f)
+    with open(log_path, "r", encoding="utf-8") as f:
+        log = json.load(f)
+
+    team_picks         = [e for e in log if e['team_id'] == team_id]
+    round_num          = (meta['current_pick'] - 1) // meta['num_teams'] + 1
+    cap                = meta.get('cap')
+    salary_cap_enabled = bool(cap)
+
+    # team.get('AIFocus', 1) inside ai_select_bb already defaults to
+    # "Best Overall" for human teams, since they never have an AIFocus set
+    player_id = ai_select_bb(team, roster_slots, team_picks, players, round_num, cap, salary_cap_enabled)
+
+    if player_id is None:
+        undrafted = [p for p in players if p.get('team_id', 0) == 0]
+        if not undrafted:
+            return None
+        undrafted.sort(key=lambda p: parse_salary(p.get('s_sal')))
+        player_id = undrafted[0].get('id')
+
+    player = next((p for p in players if str(p.get('id')) == str(player_id)), None)
+    if not player:
+        return None
+
+    pick_num = meta['current_pick']
+    player['team_id'] = team_id
+    with open(draft_path, "w", encoding="utf-8") as f:
+        json.dump(players, f, indent=2)
+
+    meta['current_pick'] += 1
+    meta['current_team_id'] = get_next_team_id(meta)
+    next_team = get_team_by_id(meta, meta['current_team_id'])
+
+    entry = {
+        "pick":            pick_num,
+        "team_id":         team_id,
+        "team":            team['team_name'],
+        "player":          f"{player.get('FirstName')} {player.get('LastName')}",
+        "pos":             player.get('short_pos') or player.get('Pos', ''),
+        "id":              str(player_id),
+        "next_team":       next_team['team_name'] if next_team else '',
+        "next_team_type":  next_team['type'] if next_team else '',
+        "auto_picked":     team['type'] == 'human',  # flag for future UI use -- not read yet
+    }
+    append_to_log(log_path, entry)
+    save_baseball_meta(draftname, meta)
+
+    return entry
+
+
+def run_ai_picks_bb(draftname):
+    """
+    Runs AI picks back-to-back until a human team is on the clock or the
+    draft is full. Started as a background task so it doesn't block the
+    socket connection that triggered it.
+    """
+    while True:
+        meta = load_baseball_meta(draftname)
+        team = get_team_by_id(meta, meta['current_team_id'])
+        if not team or team['type'] != 'ai':
+            break
+
+        entry = make_ai_pick_bb(draftname)
+        if entry is None:
+            break
+
+        socketio.emit('pick_made', entry)
+        socketio.sleep(1.5)    
+
+# ------ AI CALLS (Basketball) --------
+
+def make_ai_pick_bk(draftname):
+    """Basketball equivalent of make_ai_pick_bb."""
+    roster_slots = ["C", "F", "F", "G", "G", "UT", "UT", "UT", "UT", "UT"]
+
+    draft_path = Path("drafts") / f"{draftname}_bk.json"
+    log_path   = Path("drafts") / f"{draftname}_bk_log.json"
+
+    meta    = load_basketball_meta(draftname)
+    team_id = meta['current_team_id']
+    team    = get_team_by_id(meta, team_id)
+
+    if not team:
+        return None
+
+    total_slots = meta['num_teams'] * len(roster_slots)
+    if meta['current_pick'] > total_slots:
+        return None
+
+    with open(draft_path, "r", encoding="utf-8") as f:
+        players = json.load(f)
+    with open(log_path, "r", encoding="utf-8") as f:
+        log = json.load(f)
+
+    team_picks         = [e for e in log if e['team_id'] == team_id]
+    round_num          = (meta['current_pick'] - 1) // meta['num_teams'] + 1
+    cap                = meta.get('cap')
+    salary_cap_enabled = bool(cap)
+
+    player_id = ai_select_bk(team, roster_slots, team_picks, players, round_num, cap, salary_cap_enabled)
+
+    if player_id is None:
+        undrafted = [p for p in players if p.get('team_id', 0) == 0]
+        if not undrafted:
+            return None
+        undrafted.sort(key=lambda p: parse_salary(p.get('Salary')))
+        player_id = undrafted[0].get('id')
+
+    player = next((p for p in players if str(p.get('id')) == str(player_id)), None)
+    if not player:
+        return None
+
+    pick_num = meta['current_pick']
+    player['team_id'] = team_id
+    with open(draft_path, "w", encoding="utf-8") as f:
+        json.dump(players, f, indent=2)
+
+    meta['current_pick'] += 1
+    meta['current_team_id'] = get_next_team_id(meta)
+    next_team = get_team_by_id(meta, meta['current_team_id'])
+
+    entry = {
+        "pick":            pick_num,
+        "team_id":         team_id,
+        "team":            team['team_name'],
+        "player":          f"{player.get('FirstName')} {player.get('LastName')}",
+        "pos":             player.get('short_pos') or player.get('Pos', ''),
+        "id":              str(player_id),
+        "next_team":       next_team['team_name'] if next_team else '',
+        "next_team_type":  next_team['type'] if next_team else '',
+        "auto_picked":     team['type'] == 'human',
+    }
+    append_to_log(log_path, entry)
+    save_basketball_meta(draftname, meta)
+
+    return entry
+
+
+def run_ai_picks_bk(draftname):
+    """Basketball equivalent of run_ai_picks_bb."""
+    while True:
+        meta = load_basketball_meta(draftname)
+        team = get_team_by_id(meta, meta['current_team_id'])
+        if not team or team['type'] != 'ai':
+            break
+
+        entry = make_ai_pick_bk(draftname)
+        if entry is None:
+            break
+
+        socketio.emit('pick_made', entry)
+        socketio.sleep(1.5)
+
+
 
 # ------ SOCKET IO CALLS -------
 
@@ -849,9 +1073,66 @@ def handle_make_pick(data):
     # broadcast
     print(f">>> emitting pick_made: {entry}")
     socketio.emit('pick_made', entry)
+    if sport == 'bb' and next_team['type'] == 'ai':
+        socketio.start_background_task(run_ai_picks_bb, draftname)
+    elif sport == 'bk' and next_team['type'] == 'ai':
+        socketio.start_background_task(run_ai_picks_bk, draftname)
 
 @socketio.on('skip_pick')
 def handle_skip_pick(data):
+    draftname = data['draftname']
+    sport     = data.get('sport', 'bb')
+
+    if sport == 'bb':
+        entry = make_ai_pick_bb(draftname)
+        if entry is None:
+            return
+
+        socketio.emit('pick_made', entry)
+
+        # if the next team up is AI, keep the picks rolling
+        meta      = load_baseball_meta(draftname)
+        next_team = get_team_by_id(meta, meta['current_team_id'])
+        if next_team and next_team['type'] == 'ai':
+            socketio.start_background_task(run_ai_picks_bb, draftname)
+        return
+
+    # basketball
+    elif sport == 'bk':
+        entry = make_ai_pick_bk(draftname)
+        if entry is None:
+            return
+
+        socketio.emit('pick_made', entry)
+
+        meta      = load_basketball_meta(draftname)
+        next_team = get_team_by_id(meta, meta['current_team_id'])
+        if next_team and next_team['type'] == 'ai':
+            socketio.start_background_task(run_ai_picks_bk, draftname)
+        return
+
+    # football: no AI yet, so keep the original skip-only behavior
+    elif sport == 'fb':
+        meta     = load_football_meta(draftname)
+        log_path = Path("drafts") / f"{draftname}_fb_log.json"
+    else:
+        return
+
+    meta['current_pick'] += 1
+    meta['current_team_id'] = get_next_team_id(meta)
+    next_team = get_team_by_id(meta, meta['current_team_id'])
+
+    save_football_meta(draftname, meta)
+
+    socketio.emit('pick_skipped', {
+        'next_team':      next_team['team_name'],
+        'next_team_type': next_team['type']
+    })
+
+
+
+@socketio.on('request_sync')
+def handle_request_sync(data):
     draftname = data['draftname']
     sport     = data.get('sport', 'bb')
 
@@ -864,20 +1145,16 @@ def handle_skip_pick(data):
     elif sport == 'fb':
         meta     = load_football_meta(draftname)
         log_path = Path("drafts") / f"{draftname}_fb_log.json"
+    else:
+        return
 
-    # advance pick counter without making a pick
-    meta['current_pick'] += 1
-    meta['current_team_id'] = get_next_team_id(meta)
-    next_team = get_team_by_id(meta, meta['current_team_id'])
+    with open(log_path, "r", encoding="utf-8") as f:
+        log = json.load(f)
 
-    if sport == 'bb':
-        save_baseball_meta(draftname, meta)
-    elif sport == 'bk':
-        save_basketball_meta(draftname, meta)
-    elif sport == 'fb':
-        save_football_meta(draftname, meta)
+    current_team = get_team_by_id(meta, meta['current_team_id'])
 
-    socketio.emit('pick_skipped', {
-        'next_team':      next_team['team_name'],
-        'next_team_type': next_team['type']
+    emit('full_sync', {
+        'log': log,
+        'current_team': current_team['team_name'] if current_team else '',
+        'current_team_type': current_team['type'] if current_team else 'human',
     })
