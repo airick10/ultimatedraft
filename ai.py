@@ -7,7 +7,7 @@ shape once their position-eligibility rules are worked out.
 
 import random
 
-from .services import assign_picks_to_slots_bb, assign_picks_to_slots_bk
+from .services import assign_picks_to_slots_bb, assign_picks_to_slots_bk, assign_picks_to_slots_fb
 
 
 # ============================================================
@@ -444,3 +444,130 @@ def ai_select_bk(team, roster_slots, team_picks, all_players, round_num, cap, sa
         avg_salary = float('inf')
 
     return auto_select_bk(position_code, pool, config['focus'], config['keys'], avg_salary)
+
+# ============================================================
+# FOOTBALL
+# ============================================================
+
+# ============================================================
+# FOOTBALL
+# ============================================================
+
+SLOT_TO_POOL_FB = {
+    'QB': 'passer',
+    'HB': 'rusher', 'FB': 'rusher',
+    'TE': 'receiver', 'WR': 'receiver',
+    'Def': 'dlineoline',
+    'Special': 'special',
+}
+
+
+def open_position_lottery_fb(roster_slots, team_picks):
+    """Open slot labels for this team, one entry per open slot (duplicates included)."""
+    assigned = assign_picks_to_slots_fb(roster_slots, team_picks)
+    return [label for filled, label in zip(assigned, roster_slots) if filled is None]
+
+
+def eligible_position_fb(roster_slots, team_picks):
+    """Returns (slot_label, pool_name) for a randomly chosen open slot, or (None, None) if full."""
+    open_labels = open_position_lottery_fb(roster_slots, team_picks)
+    if not open_labels:
+        return None, None
+    slot_label = random.choice(open_labels)
+    return slot_label, SLOT_TO_POOL_FB.get(slot_label)
+
+
+FB_ASCENDING_STATS = {'s_Run', 's_Pass', 's_YdspPlay'}  # lower is better
+
+
+def ai_sort_pool_fb(stat_key, players):
+    def keyfunc(r):
+        if stat_key == 'Salary':
+            return parse_salary(r.get('Salary'))
+        raw = r.get(stat_key, 0)
+        if isinstance(raw, str) and raw.strip().endswith('%'):
+            try:
+                return float(raw.strip().rstrip('%'))
+            except ValueError:
+                return 0.0
+        return float(raw or 0)
+
+    ascending = stat_key in FB_ASCENDING_STATS
+    return sorted(players, key=keyfunc, reverse=not ascending)
+
+
+def ai_select_snippet_fb(playerpool, threshold, avg_salary):
+    """No position filter needed -- the pool passed in is already position-locked by kind."""
+    counter = 0
+    for player in playerpool:
+        salary = parse_salary(player.get('Salary'))
+        if salary > avg_salary or salary < 600:
+            continue
+        if threshold < 0 or counter > threshold:
+            return player.get('id')
+        counter += 1
+    return None
+
+
+def top_four_grabs_fb(playerpool, avg_salary):
+    roll = random.randrange(100)
+    threshold = -1 if roll < 40 else 0 if roll < 70 else 1 if roll < 90 else 2
+    return ai_select_snippet_fb(playerpool, threshold, avg_salary)
+
+
+def auto_select_fb(pool_name, all_players, stat_key, avg_salary):
+    pool = [p for p in all_players if p.get('kind') == pool_name and p.get('team_id', 0) == 0]
+    sorted_pool = ai_sort_pool_fb(stat_key, pool)
+    return top_four_grabs_fb(sorted_pool, avg_salary)
+
+
+# Each archetype picks ONE preferred stat per pool -- no roll needed, since
+# eligible_position_fb already determined the pool from the open roster slot.
+AI_FOCUS_TABLE_FB = {
+    1:  {'passer': 'Salary',     'rusher': 'Salary',     'receiver': 'Salary',   'dlineoline': 'Salary',   'special': 'Salary'},
+    2:  {'passer': 'PassYards',  'rusher': 'RushYards',  'receiver': 'RecYards', 'dlineoline': 's_OLRun',  'special': 's_KO_Avg'},
+    3:  {'passer': 's_QBRat',    'rusher': 'RushYards',  'receiver': 'RecYards', 'dlineoline': 's_OLPass', 'special': 's_P_Avg'},
+    4:  {'passer': 'CompPct',    'rusher': 'RushAvg',    'receiver': 's_YpRec',  'dlineoline': 's_OLRun',  'special': 's_PR_Avg'},
+    5:  {'passer': 'PassTDs',    'rusher': 'RushTDs',    'receiver': 'RecTDs',   'dlineoline': 's_OLPass', 'special': 's_KickCoverage'},
+    6:  {'passer': 'CompPct',    'rusher': 'RushYards',  'receiver': 'RecYards', 'dlineoline': 's_Pass',   'special': 's_PuntCoverage'},
+    7:  {'passer': 'Salary',     'rusher': 'Salary',     'receiver': 'Salary',   'dlineoline': 'Salary',   'special': 's_KO_TD'},
+    8:  {'passer': 's_YpA',      'rusher': 's_YpRush',   'receiver': 's_YpRec',  'dlineoline': 's_YdspPlay','special': 's_P_Avg'},
+    9:  {'passer': 'CompPct',    'rusher': 'RushAvg',    'receiver': 's_YpRec',  'dlineoline': 's_YdspPlay','special': 's_KO_Avg'},
+    10: {'passer': 'PassYards',  'rusher': 'RushYards',  'receiver': 'RecYards', 'dlineoline': 's_OLPass', 'special': 's_PR_Avg'},
+    11: {'passer': 'CompPct',    'rusher': 'RushYards',  'receiver': 'Receptions','dlineoline': 's_OLRun', 'special': 's_P_Avg'},
+    12: {'passer': 'PassTDs',    'rusher': 'RushYards',  'receiver': 'RecYards', 'dlineoline': 's_OLPass', 'special': 's_KO_TD'},
+    13: {'passer': 's_QBRat',    'rusher': 'RushYards',  'receiver': 'RecYards', 'dlineoline': 's_OLRun',  'special': 's_P_Avg'},
+    14: {'passer': 'Salary',     'rusher': 'RushYards',  'receiver': 'RecYards', 'dlineoline': 'Salary',   'special': 'Salary'},
+    15: {'passer': 'Salary',     'rusher': 'RushYards',  'receiver': 'RecYards', 'dlineoline': 's_OLRun',  'special': 's_KO_Avg'},
+    16: {'passer': 'PassTDs',    'rusher': 'RushTDs',    'receiver': 'RecTDs',   'dlineoline': 's_OLPass', 'special': 's_PR_TD'},
+}
+
+
+def ai_select_fb(team, roster_slots, team_picks, all_players, round_num, cap, salary_cap_enabled):
+    """Port of aiSelect() for football -- one team's single pick."""
+    ai_focus = team.get('AIFocus', 1)
+    config = AI_FOCUS_TABLE_FB.get(ai_focus, AI_FOCUS_TABLE_FB[1])
+
+    slot_label, pool_name = eligible_position_fb(roster_slots, team_picks)
+    if pool_name is None:
+        return None  # roster already full
+
+    stat_key = config.get(pool_name, 'Salary')
+    slots_left = max(len(roster_slots) - len(team_picks), 1)
+
+    if salary_cap_enabled:
+        spent = sum(
+            parse_salary(p.get('Salary'))
+            for p in all_players
+            if p.get('team_id', 0) == team['team_id']
+        )
+        budget_mode = random.randrange(100) < 50 and round_num > 5
+        if round_num > 10 or budget_mode:  # 13-slot roster -- scaled down from baseball's 18/25
+            remaining = parse_salary(cap) - spent
+            avg_salary = remaining / slots_left if remaining > 0 else 0
+        else:
+            avg_salary = float('inf')
+    else:
+        avg_salary = float('inf')
+
+    return auto_select_fb(pool_name, all_players, stat_key, avg_salary)

@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, abort, current_app
-from .ai import ai_select_bb, ai_select_bk, parse_salary
+from .ai import ai_select_bb, ai_select_bk, ai_select_fb, parse_salary
 from .services import (
     load_baseball,
     load_basketball,
@@ -704,6 +704,9 @@ def fb_load():
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
     current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
     current_team_type = current_team_obj['type'] if current_team_obj else 'human'
+    # if the draft opens with an AI team on the clock, get it picking
+    if current_team_type == 'ai':
+        socketio.start_background_task(run_ai_picks_fb, draftname)
 
     return render_template(
         "fbdraft.html",
@@ -784,6 +787,9 @@ def fb_draft():
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
     current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
     current_team_type = current_team_obj['type'] if current_team_obj else 'human'
+    # if the draft opens with an AI team on the clock, get it picking
+    if current_team_type == 'ai':
+        socketio.start_background_task(run_ai_picks_fb, draftname)
 
     return render_template(
         "fbdraft.html",
@@ -984,7 +990,93 @@ def run_ai_picks_bk(draftname):
         socketio.emit('pick_made', entry)
         socketio.sleep(1.5)
 
+# ------ AI CALLS (FOOTBALL) --------
 
+def make_ai_pick_fb(draftname):
+    """Football equivalent of make_ai_pick_bb/bk."""
+    roster_slots = ["QB", "QB", "HB", "HB", "FB", "TE", "TE",
+                    "WR", "WR", "WR", "WR", "Def", "Special"]
+
+    draft_path = Path("drafts") / f"{draftname}_fb.json"
+    log_path   = Path("drafts") / f"{draftname}_fb_log.json"
+
+    meta    = load_football_meta(draftname)
+    team_id = meta['current_team_id']
+    team    = get_team_by_id(meta, team_id)
+
+    if not team:
+        return None
+
+    total_slots = meta['num_teams'] * len(roster_slots)
+    if meta['current_pick'] > total_slots:
+        return None
+
+    with open(draft_path, "r", encoding="utf-8") as f:
+        players = json.load(f)
+    with open(log_path, "r", encoding="utf-8") as f:
+        log = json.load(f)
+
+    team_picks         = [e for e in log if e['team_id'] == team_id]
+    round_num          = (meta['current_pick'] - 1) // meta['num_teams'] + 1
+    cap                = meta.get('cap')
+    salary_cap_enabled = bool(cap)
+
+    player_id = ai_select_fb(team, roster_slots, team_picks, players, round_num, cap, salary_cap_enabled)
+
+    if player_id is None:
+        undrafted = [p for p in players if p.get('team_id', 0) == 0]
+        if not undrafted:
+            return None
+        undrafted.sort(key=lambda p: parse_salary(p.get('Salary')))
+        player_id = undrafted[0].get('id')
+
+    player = next((p for p in players if str(p.get('id')) == str(player_id)), None)
+    if not player:
+        return None
+
+    pick_num = meta['current_pick']
+    player['team_id'] = team_id
+    with open(draft_path, "w", encoding="utf-8") as f:
+        json.dump(players, f, indent=2)
+
+    meta['current_pick'] += 1
+    meta['current_team_id'] = get_next_team_id(meta)
+    next_team = get_team_by_id(meta, meta['current_team_id'])
+
+    # football players use 'name' (defense/special) instead of FirstName/LastName
+    player_name = player.get('name') or f"{player.get('FirstName', '')} {player.get('LastName', '')}".strip()
+
+    entry = {
+        "pick":            pick_num,
+        "team_id":         team_id,
+        "team":            team['team_name'],
+        "player":          player_name,
+        "pos":             player.get('short_pos') or player.get('Positions', ''),
+        "id":              str(player_id),
+        "next_team":       next_team['team_name'] if next_team else '',
+        "next_team_type":  next_team['type'] if next_team else '',
+        "auto_picked":     team['type'] == 'human',
+    }
+    append_to_log(log_path, entry)
+    save_football_meta(draftname, meta)
+
+    return entry
+
+
+def run_ai_picks_fb(draftname):
+    """Football equivalent of run_ai_picks_bb/bk."""
+    while True:
+        meta = load_football_meta(draftname)
+        team = get_team_by_id(meta, meta['current_team_id'])
+        if not team or team['type'] != 'ai':
+            break
+
+        entry = make_ai_pick_fb(draftname)
+        if entry is None:
+            break
+
+        socketio.emit('pick_made', entry)
+        socketio.sleep(1.5)
 
 # ------ SOCKET IO CALLS -------
 
@@ -1077,6 +1169,8 @@ def handle_make_pick(data):
         socketio.start_background_task(run_ai_picks_bb, draftname)
     elif sport == 'bk' and next_team['type'] == 'ai':
         socketio.start_background_task(run_ai_picks_bk, draftname)
+    elif sport == 'fb' and next_team['type'] == 'ai':
+        socketio.start_background_task(run_ai_picks_fb, draftname)
 
 @socketio.on('skip_pick')
 def handle_skip_pick(data):
@@ -1111,10 +1205,19 @@ def handle_skip_pick(data):
             socketio.start_background_task(run_ai_picks_bk, draftname)
         return
 
-    # football: no AI yet, so keep the original skip-only behavior
+    # football
     elif sport == 'fb':
-        meta     = load_football_meta(draftname)
-        log_path = Path("drafts") / f"{draftname}_fb_log.json"
+        entry = make_ai_pick_fb(draftname)
+        if entry is None:
+            return
+
+        socketio.emit('pick_made', entry)
+
+        meta      = load_football_meta(draftname)
+        next_team = get_team_by_id(meta, meta['current_team_id'])
+        if next_team and next_team['type'] == 'ai':
+            socketio.start_background_task(run_ai_picks_fb, draftname)
+        return
     else:
         return
 
