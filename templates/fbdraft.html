@@ -12,6 +12,11 @@
 const socket = io();
 const currentDraftname = "{{ draftname }}";
 const currentSport = "{{ sport }}";
+const POS_TO_SLOT = {
+    'QB': 'QB', 'HB': 'HB', 'FB': 'FB', 'TE': 'TE', 'WR': 'WR',
+    'DO': 'Def', 'KP': 'Special'
+};
+const HB_FB_OVERFLOW = { 'HB': 'FB', 'FB': 'HB' };
 let selectedPlayerId = null;
 let sortDir = {};
 let pickTimer = null;
@@ -20,6 +25,7 @@ let timeLeft  = 0;
 // ── SocketIO connection ──
 socket.on('connect', () => {
     console.log('SocketIO connected:', socket.id);
+    socket.emit('request_sync', { draftname: currentDraftname, sport: currentSport });
 });
 socket.on('disconnect', () => {
     console.log('SocketIO disconnected');
@@ -65,13 +71,17 @@ socket.on('pick_made', (entry) => {
     // update roster slot for the team that just picked
     const teamRoster = document.getElementById(`roster-${entry.team}`);
     if (teamRoster) {
-        const slots = teamRoster.querySelectorAll('.t-pick');
-        for (let slot of slots) {
-            if (slot.textContent.includes('—')) {
-                slot.textContent = `${entry.pos}: ${entry.player}`;
-                slot.classList.add('filled');
-                break;
-            }
+        const slotLabel = mapPosToSlot(entry.pos);
+        let slot = teamRoster.querySelector(`.t-pick[data-slot="${slotLabel}"]:not(.filled)`);
+        if (!slot && HB_FB_OVERFLOW[slotLabel]) {
+            slot = teamRoster.querySelector(`.t-pick[data-slot="${HB_FB_OVERFLOW[slotLabel]}"]:not(.filled)`);
+        }
+        if (!slot) {
+            slot = teamRoster.querySelector(`.t-pick:not(.filled)`);
+        }
+        if (slot) {
+            slot.textContent = `${entry.pos}: ${entry.player}`;
+            slot.classList.add('filled');
         }
     }
 
@@ -122,6 +132,45 @@ socket.on('pick_skipped', (data) => {
 socket.on('pick_error', (data) => {
     console.error('Pick error:', data.message);
     alert(data.message);
+});
+
+socket.on('full_sync', (data) => {
+    console.log('Full sync received:', data);
+
+    const logDiv = document.getElementById('draftLog');
+    if (logDiv) {
+        logDiv.innerHTML = '';
+        if (data.log.length === 0) {
+            const el = document.createElement('div');
+            el.className = 'log-empty';
+            el.textContent = 'No picks yet';
+            logDiv.appendChild(el);
+        } else {
+            data.log.forEach(entry => {
+                const el = document.createElement('div');
+                el.className = 'log-entry';
+                el.textContent = `${entry.pick}. ${entry.team} — ${entry.pos} ${entry.player}`;
+                logDiv.appendChild(el);
+            });
+        }
+    }
+
+    data.log.forEach(entry => {
+        const row = document.querySelector(`tr[data-id="${entry.id}"]`);
+        if (row) row.classList.add('drafted');
+    });
+
+    const clockEl = document.getElementById('clockTeam');
+    if (clockEl) clockEl.textContent = data.current_team;
+    setActiveLogo(data.current_team);
+
+    const select = document.getElementById('rosterSelect');
+    if (select) {
+        select.value = data.current_team;
+        showRoster(data.current_team);
+    }
+
+    startTimer(data.current_team_type === 'human' ? 120 : 15);
 });
 
 // ── DOM ready ──
@@ -272,6 +321,10 @@ function switchStatView(view) {
     document.querySelectorAll('.stat-strat').forEach(el => {
         el.style.display = showReal ? 'none' : '';
     });
+}
+
+function mapPosToSlot(pos) {
+    return POS_TO_SLOT[pos] || pos;
 }
 </script>
 {% endblock %}
@@ -534,23 +587,23 @@ function switchStatView(view) {
 </select>
 
     {% for team in all_teams %}
-    <div class="roster-team" id="roster-{{ team.name }}" style="display:none">
-        <div class="t-name">{{ team.name }}</div>
-        {% set team_picks = rosters.get(loop.index, []) %}
-        {% for slot in roster_slots %}
-        {% if loop.index0 < team_picks|length %}
-        {% set pick = team_picks[loop.index0] %}
-        <div class="t-pick filled" id="slot-{{ team.name }}-{{ loop.index0 }}">
-            {{ pick.pos }}: {{ pick.player }}
-        </div>
-        {% else %}
-        <div class="t-pick" id="slot-{{ team.name }}-{{ loop.index0 }}">
-            {{ slot }}: —
-        </div>
-        {% endif %}
-        {% endfor %}
+<div class="roster-team" id="roster-{{ team.name }}" style="display:none">
+    <div class="t-name">{{ team.name }}</div>
+    {% set assigned = roster_assignments[team.team_id] %}
+    {% for slot in roster_slots %}
+    {% set pick = assigned[loop.index0] %}
+    {% if pick %}
+    <div class="t-pick filled" data-slot="{{ slot }}" id="slot-{{ team.name }}-{{ loop.index0 }}">
+        {{ pick.pos }}: {{ pick.player }}
     </div>
+    {% else %}
+    <div class="t-pick" data-slot="{{ slot }}" id="slot-{{ team.name }}-{{ loop.index0 }}">
+        {{ slot }}: —
+    </div>
+    {% endif %}
     {% endfor %}
+</div>
+{% endfor %}
 </div>
 
 </div>
