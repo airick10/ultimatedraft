@@ -110,24 +110,6 @@ socket.on('pick_made', (entry) => {
     startTimer(isHuman ? 120 : 15);
 });
 
-socket.on('pick_skipped', (data) => {
-    const announcement = document.getElementById('tickerAnnouncement');
-    if (announcement) announcement.textContent = 'Pick skipped — clock expired';
-
-    const select = document.getElementById('rosterSelect');
-    if (select && data.next_team) {
-        select.value = data.next_team;
-        showRoster(data.next_team);
-    }
-
-    const clockEl = document.getElementById('clockTeam');
-    if (clockEl) clockEl.textContent = data.next_team;
-
-    setActiveLogo(data.next_team);
-
-    const isHuman = data.next_team_type === 'human';
-    startTimer(isHuman ? 120 : 15);
-});
 
 socket.on('pick_error', (data) => {
     console.error('Pick error:', data.message);
@@ -174,6 +156,17 @@ socket.on('full_sync', (data) => {
     startTimer(data.current_team_type === 'human' ? 120 : 15);
 });
 
+socket.on('draft_complete', () => {
+    clearInterval(pickTimer);
+    const announcement = document.getElementById('tickerAnnouncement');
+    if (announcement) announcement.textContent = 'Draft complete!';
+    const timer = document.getElementById('tickerTimer');
+    if (timer) timer.textContent = '--';
+    document.getElementById('draftBtn').style.display = 'none';
+    document.getElementById('clockTeam').textContent = 'Draft complete';
+});
+
+socket.on('draft_complete', showDraftComplete);
 
 // ── DOM ready ──
 document.addEventListener('DOMContentLoaded', () => {
@@ -321,6 +314,18 @@ function switchStatView(view) {
 function mapPosToSlot(pos) {
     return POS_TO_SLOT[pos] || 'UT';
 }
+
+function showDraftComplete() {
+    clearInterval(pickTimer);
+    const announcement = document.getElementById('tickerAnnouncement');
+    if (announcement) announcement.textContent = 'Draft complete!';
+    const timer = document.getElementById('tickerTimer');
+    if (timer) timer.textContent = '--';
+    document.getElementById('draftBtn').style.display = 'none';
+    document.getElementById('clockTeam').textContent = 'Draft complete';
+}
+
+
 </script>
 {% endblock %}
 
@@ -440,7 +445,15 @@ function mapPosToSlot(pos) {
                 <tr data-pos="{{ p.short_pos }}" data-kind="hitter" data-id="{{ p.id }}">
                     <td class="pos-badge">{{ p.short_pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
-                    <td>{{ p.s_team }}</td>
+                    <td class="team-cell">
+                      {% if p.Team %}
+                      <img class="team-logo"
+                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/seal/{{ p.Team }}.png"
+                           alt="{{ p.Team }}" title="{{ p.Team }}"
+                           onerror="this.style.display='none'; this.nextElementSibling.classList.remove('visually-hidden');">
+                      <span class="visually-hidden">{{ p.Team }}</span>
+                      {% endif %}
+                    </td>
                     <!-- real stats -->
                     <td class="stat-real">{{ p.b_batting_avg if p.b_batting_avg is defined else '—' }}</td>
                     <td class="stat-real">{{ p.b_hr if p.b_hr is defined else '—' }}</td>
@@ -459,7 +472,15 @@ function mapPosToSlot(pos) {
                 <tr data-pos="{{ p.short_pos }}" data-kind="pitcher" data-id="{{ p.id }}" style="display:none">
                     <td class="pos-badge">{{ p.short_pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
-                    <td>{{ p.s_team }}</td>
+                    <td class="team-cell">
+                      {% if p.Team %}
+                      <img class="team-logo"
+                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/seal/{{ p.Team }}.png"
+                           alt="{{ p.Team }}" title="{{ p.Team }}"
+                           onerror="this.style.display='none'; this.nextElementSibling.classList.remove('visually-hidden');">
+                      <span class="visually-hidden">{{ p.Team }}</span>
+                      {% endif %}
+                    </td>
                     <!-- real stats -->
                     <td class="stat-real">{{ p.p_earned_run_avg if p.p_earned_run_avg is defined else '—' }}</td>
                     <td class="stat-real">{{ p.p_w if p.p_w is defined else '—' }}</td>

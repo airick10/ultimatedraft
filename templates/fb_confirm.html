@@ -81,14 +81,14 @@ function validateSelections() {
     const doCount = document.querySelectorAll('input.pos-DO:checked').length;
     const kpCount = document.querySelectorAll('input.pos-KP:checked').length;
 
-    const qbOk = qbCount === required.QB;
-    const hbOk = hbCount === required.HB;
-    const teOk = teCount === required.TE;
-    const wrOk = wrCount === required.WR;
-    const doOk = doCount === required.DO;
-    const kpOk = kpCount === required.KP;
+    const qbOK = qbCount === required.QB;
+    const hbOK = hbCount === required.HB;
+    const teOK = teCount === required.TE;
+    const wrOK = wrCount === required.WR;
+    const doOK = doCount === required.DO;
+    const kpOK = kpCount === required.KP;
 
-    document.getElementById('submit-btn').disabled = !(qbOk && hbOk && teOk && wrOk && doOK && kpOK);
+    document.getElementById('submit-btn').disabled = !(qbOK && hbOK && teOK && wrOK && doOK && kpOK);
 
     document.getElementById('qb-count').textContent = `${qbCount} / ${required.QB}`;
     document.getElementById('hb-count').textContent = `${hbCount} / ${required.HB}`;
@@ -241,7 +241,7 @@ document.addEventListener('DOMContentLoaded', validateSelections);
           <br><br>
 
           {% for p in players %}
-              {% if p.get('short_pos','') == "HB" %}
+              {% if p.get('short_pos','') in ['HB', 'FB'] %}
                   <input 
                       type="checkbox" 
                       class="pos-HB" 

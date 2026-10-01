@@ -93,6 +93,20 @@
     <input type="submit" value="Open Draft">
   </form>
 
+<h1 class="text-light">Delete Saved Draft</h1>
+
+  <form action="{{ url_for('main.bb_delete') }}" method="POST"
+        onsubmit="return confirm('Delete this draft and all of its files? This cannot be undone.');">
+    <select name="delete_draft_file" id="delete_draft_file" required>
+      <option value="">Select a saved draft</option>
+      {% for filename in saved_drafts %}
+        <option value="{{ filename }}">{{ filename }}</option>
+      {% endfor %}
+    </select>
+    <input type="submit" value="Delete Draft">
+  </form>
+
+  
   <hr>
 
   <form action="/bb_confirm" method="POST">

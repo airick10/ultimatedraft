@@ -22,6 +22,8 @@ let sortDir = {};
 let pickTimer = null;
 let timeLeft  = 0;
 
+
+
 // ── SocketIO connection ──
 socket.on('connect', () => {
     console.log('SocketIO connected:', socket.id);
@@ -110,24 +112,6 @@ socket.on('pick_made', (entry) => {
     startTimer(isHuman ? 120 : 15);
 });
 
-socket.on('pick_skipped', (data) => {
-    const announcement = document.getElementById('tickerAnnouncement');
-    if (announcement) announcement.textContent = 'Pick skipped — clock expired';
-
-    const select = document.getElementById('rosterSelect');
-    if (select && data.next_team) {
-        select.value = data.next_team;
-        showRoster(data.next_team);
-    }
-
-    const clockEl = document.getElementById('clockTeam');
-    if (clockEl) clockEl.textContent = data.next_team;
-
-    setActiveLogo(data.next_team);
-
-    const isHuman = data.next_team_type === 'human';
-    startTimer(isHuman ? 120 : 15);
-});
 
 socket.on('pick_error', (data) => {
     console.error('Pick error:', data.message);
@@ -172,6 +156,18 @@ socket.on('full_sync', (data) => {
 
     startTimer(data.current_team_type === 'human' ? 120 : 15);
 });
+
+socket.on('draft_complete', () => {
+    clearInterval(pickTimer);
+    const announcement = document.getElementById('tickerAnnouncement');
+    if (announcement) announcement.textContent = 'Draft complete!';
+    const timer = document.getElementById('tickerTimer');
+    if (timer) timer.textContent = '--';
+    document.getElementById('draftBtn').style.display = 'none';
+    document.getElementById('clockTeam').textContent = 'Draft complete';
+});
+
+socket.on('draft_complete', showDraftComplete);
 
 // ── DOM ready ──
 document.addEventListener('DOMContentLoaded', () => {
@@ -308,6 +304,16 @@ function switchStatView(view) {
 function mapPosToSlot(pos) {
     return POS_TO_SLOT[pos] || 'UT';
 }
+
+function showDraftComplete() {
+    clearInterval(pickTimer);
+    const announcement = document.getElementById('tickerAnnouncement');
+    if (announcement) announcement.textContent = 'Draft complete!';
+    const timer = document.getElementById('tickerTimer');
+    if (timer) timer.textContent = '--';
+    document.getElementById('draftBtn').style.display = 'none';
+    document.getElementById('clockTeam').textContent = 'Draft complete';
+}
 </script>
 {% endblock %}
 
@@ -398,7 +404,15 @@ function mapPosToSlot(pos) {
                 <tr data-pos="{{ p.Pos }}" data-id="{{ p.id }}">
                     <td class="pos-badge">{{ p.Pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
-                    <td>{{ p.Team }}</td>
+                    <td class="team-cell">
+                      {% if p.Team %}
+                      <img class="team-logo"
+                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/seal/basketball/{{ p.Team }}.png"
+                           alt="{{ p.Team }}" title="{{ p.Team }}"
+                           onerror="this.style.display='none'; this.nextElementSibling.classList.remove('visually-hidden');">
+                      <span class="visually-hidden">{{ p.Team }}</span>
+                      {% endif %}
+                    </td>
                     <td class="stat-real">{{ p.ptspgm if p.ptspgm is defined else '—' }}</td>
                     <td class="stat-real">{{ p.rbspgm if p.rbspgm is defined else '—' }}</td>
                     <td class="stat-real">{{ p.astpgm if p.astpgm is defined else '—' }}</td>
@@ -456,15 +470,5 @@ function mapPosToSlot(pos) {
 </div>
 
 </div>
-
-<script>
-function filterPos(btn, pos) {
-    document.querySelectorAll('.btn-pos').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    document.querySelectorAll('#playerBody tr').forEach(row => {
-        row.style.display = (pos === 'ALL' || row.dataset.pos === pos) ? '' : 'none';
-    });
-}
-</script>
 
 {% endblock %}

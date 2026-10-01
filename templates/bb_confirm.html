@@ -85,18 +85,18 @@ function validateSelections() {
     const sPCount = document.querySelectorAll('input.pos-SP:checked').length;
     const rPCount = document.querySelectorAll('input.pos-RP:checked').length;
 
-    const cOk = cCount === required['C'];
-    const fBOk = fBCount === required['1B'];
-    const sBOk = sBCount === required['2B'];
-    const tBOk = tBCount === required['3B'];
-    const ssOk = ssCount === required['SS'];
-    const lfOk = ssCount === required['LF'];
-    const cfOk = ssCount === required['CF'];
-    const rfOk = ssCount === required['RF'];
-    const sPOk = ssCount === required['SP'];
-    const rPOk = ssCount === required['rP'];
+    const cOK = cCount === required['C'];
+    const fBOK = fBCount === required['1B'];
+    const sBOK = sBCount === required['2B'];
+    const tBOK = tBCount === required['3B'];
+    const ssOK = ssCount === required['SS'];
+    const lfOK = lfCount === required['LF'];
+    const cfOK = cfCount === required['CF'];
+    const rfOK = rfCount === required['RF'];
+    const sPOK = sPCount === required['SP'];
+    const rPOK = rPCount === required['RP'];
 
-    document.getElementById('submit-btn').disabled = !(cOk && fBOk && sBOk && tBOK && ssOK && lfOK && cfOK && rfOK && sPOK && rPOK);
+    document.getElementById('submit-btn').disabled = !(cOK && fBOK && sBOK && tBOK && ssOK && lfOK && cfOK && rfOK && sPOK && rPOK);
 
     document.getElementById('c-count').textContent  = `${cCount} / ${required['C']}`;
     document.getElementById('1b-count').textContent = `${fBCount} / ${required['1B']}`;
@@ -516,7 +516,7 @@ document.addEventListener('DOMContentLoaded', validateSelections);
           <br><br>
 
           {% for p in players %}
-              {% if p.get('short_pos','') == "SP" %}
+              {% if p.get('short_pos','') == "RP" %}
                   <input 
                       type="checkbox" 
                       class="pos-RP" 
