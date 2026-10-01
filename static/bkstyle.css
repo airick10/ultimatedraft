@@ -49,6 +49,18 @@
 .logo-wrap.active.ai img  { filter:drop-shadow(0 0 10px #ff4444); }
 .logo-wrap.active.ai .team-label { color:#ff4444; }
 
+.logo-wrap.human img {
+    outline: 3px solid #2196f3;
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.team-logo {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+    vertical-align: middle;
+}
 /* ── Main 3-pane row ── */
 .draft-body { display:flex; height:calc(100vh - 155px); overflow:hidden; }
 
