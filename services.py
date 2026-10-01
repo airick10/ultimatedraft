@@ -89,6 +89,25 @@ def load_football_special_json():
     return _index_by_id(data) if isinstance(data, list) else data
 
 
+def delete_saved_draft(filename, sport):
+    """Deletes the player, meta, and log files for a saved draft. sport: 'bb', 'bk', or 'fb'."""
+    suffix = f"_{sport}.json"
+    safe_name = Path(filename).name   # strips any path tricks like ../../
+    if safe_name != filename or not safe_name.endswith(suffix):
+        raise ValueError(f"Not a valid {sport} draft file: {filename}")
+
+    draftname = safe_name[:-len(suffix)]
+    draft_dir = Path("drafts")
+    player_path = draft_dir / safe_name
+
+    if not player_path.exists():
+        raise FileNotFoundError(f"Draft file not found: {filename}")
+
+    player_path.unlink()
+    (draft_dir / f"{draftname}_{sport}_meta.json").unlink(missing_ok=True)
+    (draft_dir / f"{draftname}_{sport}_log.json").unlink(missing_ok=True)
+
+
 def load_baseball(pool, num_teams):
     """Combine hitters and pitchers into a single sorted LIST."""
     hitters  = load_hitters_json()
@@ -691,31 +710,6 @@ def load_football(pool, num_teams):
 
     people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
     return people
-
-
-def initial_save_football_json(players, draftname):
-    people = []
-
-    for p in players:
-        people.append({
-            **p,
-            "team_id": 0,
-            "id": p.get("id") or p.get("ID")
-        })
-
-    people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
-
-    filename = f"{draftname}_bk.json"
-
-    output_dir = Path("drafts")
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    output_path = output_dir / filename
-
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(people, f, indent=2)
-
-    return output_path
 
 
 def initial_save_football_meta_json(

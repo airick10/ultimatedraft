@@ -77,6 +77,8 @@ SLOT_LABEL_TO_CODE_BB = {
 }
 
 
+
+
 def open_position_lottery(roster_slots, team_picks):
     """
     Old aipicks.py-style position codes for every roster slot still open,
@@ -149,16 +151,15 @@ def check_functions_bb(def_check):
     }
     return table.get(def_check, lambda p: True)
 
+FOCUS_KINDS_BB = {11: 'P', 13: 'HP', 14: 'H'}
 
-def ai_select_snippet_bb(playerpool, threshold, def_check, avg_salary):
-    """
-    playerpool must already be sorted by the desired stat and filtered to
-    undrafted players (team_id == 0). Returns a player's id, or None.
-    """
-    check = check_functions_bb(def_check)
+
+def ai_select_snippet_bb(playerpool, threshold, def_check, avg_salary, focus=0):
+    pos_check = check_functions_bb(def_check)
+    focus_check = check_functions_bb(focus) if focus else (lambda p: True)
     counter = 0
     for player in playerpool:
-        if not check(player):
+        if not (pos_check(player) and focus_check(player)):
             continue
         salary = parse_salary(player.get('s_sal'))
         if salary > avg_salary or salary < 600:
@@ -169,9 +170,7 @@ def ai_select_snippet_bb(playerpool, threshold, def_check, avg_salary):
     return None
 
 
-def top_four_grabs_bb(kind, playerpool, position, direction, avg_salary):
-    """kind: 'H' or 'P'. position: from eligible_position_bb. direction: for
-    pitchers, 1 prefers an open SP slot, 11 prefers an open RP slot."""
+def top_four_grabs_bb(kind, playerpool, position, direction, avg_salary, focus=0):
     if kind == 'P':
         if direction == 1 and position[1] == 1:
             def_check = 1
@@ -180,12 +179,18 @@ def top_four_grabs_bb(kind, playerpool, position, direction, avg_salary):
         else:
             def_check = 0
     else:
-        def_check = position[0]
+        def_check = int(position[0])
 
     roll = random.randrange(100)
     threshold = -1 if roll < 40 else 0 if roll < 70 else 1 if roll < 90 else 2
 
-    return ai_select_snippet_bb(playerpool, threshold, def_check, avg_salary)
+    # only apply the focus if it makes sense for this kind of player
+    use_focus = focus if kind in FOCUS_KINDS_BB.get(focus, '') else 0
+
+    pick = ai_select_snippet_bb(playerpool, threshold, def_check, avg_salary, use_focus)
+    if pick is None and use_focus:
+        pick = ai_select_snippet_bb(playerpool, threshold, def_check, avg_salary, 0)
+    return pick
 
 
 def ai_sort_pool_bb(stat_key, players):
@@ -249,12 +254,12 @@ def auto_select_hitter_bb(position, hitters_pool, pitchers_pool, round_num, focu
     if side < side_threshold:
         key_str = random.choices(keys[0:3], weights=[70, 20, 10])[0]
         pool = ai_sort_pool_bb(key_str, hitters_pool)
-        return top_four_grabs_bb('H', pool, position, focus, avg_salary)
+        return top_four_grabs_bb('H', pool, position, 0, avg_salary, focus)
 
     key_str = random.choices(keys[3:6], weights=[70, 20, 10])[0]
     pool = ai_sort_pool_bb(key_str, pitchers_pool)
     direction = 1 if (random.randrange(100) < 80 and position[1] > 0) else 11
-    return top_four_grabs_bb('P', pool, position, direction, avg_salary)
+    return top_four_grabs_bb('P', pool, position, direction, avg_salary, focus)
 
 
 def auto_select_pitcher_bb(position, hitters_pool, pitchers_pool, round_num, focus, keys, avg_salary):
@@ -269,14 +274,16 @@ def auto_select_pitcher_bb(position, hitters_pool, pitchers_pool, round_num, foc
         key_str = random.choices(keys[0:3], weights=[70, 20, 10])[0]
         pool = ai_sort_pool_bb(key_str, pitchers_pool)
         if random.randrange(100) < 80 and position[1] > 0:
-            direction = 0 if focus == 13 else 1
+            direction = 1
         else:
             direction = 11
-        return top_four_grabs_bb('P', pool, position, direction, avg_salary)
+        if focus == 11:      # RP-heavy archetype: always lean reliever
+            direction = 11
+        return top_four_grabs_bb('P', pool, position, direction, avg_salary, focus)
 
     key_str = random.choices(keys[3:6], weights=[70, 20, 10])[0]
     pool = ai_sort_pool_bb(key_str, hitters_pool)
-    return top_four_grabs_bb('H', pool, position, focus, avg_salary)
+    return top_four_grabs_bb('H', pool, position, 0, avg_salary, focus)
 
 
 def ai_select_bb(team, roster_slots, team_picks, all_players, round_num, cap, salary_cap_enabled):

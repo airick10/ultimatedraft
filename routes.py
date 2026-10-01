@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, abort, current_app
+from flask import Blueprint, render_template, request, abort, current_app, redirect, url_for
 from .ai import ai_select_bb, ai_select_bk, ai_select_fb, parse_salary
 from .services import (
     load_baseball,
@@ -42,7 +42,8 @@ from .services import (
     append_to_log,
     assign_picks_to_slots_bb,
     assign_picks_to_slots_bk,
-    assign_picks_to_slots_fb
+    assign_picks_to_slots_fb,
+    delete_saved_draft
 )
 from datetime import datetime
 import random
@@ -88,6 +89,7 @@ def bb_load():
         abort(400, str(exc))
 
     meta    = draft_data.get("meta", {})
+    draftname = meta.get("draftname", draft_data.get("draftname", ""))
     log     = draft_data.get("log", [])
     players = draft_data.get("players", [])
 
@@ -292,6 +294,19 @@ def bb_draft():
         sport="bb"
     )
 
+@main.route("/bb_delete", methods=["POST"])
+def bb_delete():
+    filename = request.form.get("delete_draft_file", "").strip()
+    if not filename:
+        abort(400, "No draft file selected.")
+    try:
+        delete_saved_draft(filename, "bb")
+    except FileNotFoundError:
+        abort(404, "Draft file not found.")
+    except ValueError as exc:
+        abort(400, str(exc))
+    return redirect(url_for("main.start_baseball"))
+
 #-------- BASKETBALL -----------------------------------------------------------------
 
 @main.route("/basketball")
@@ -322,6 +337,7 @@ def bk_load():
         abort(400, str(exc))
 
     meta    = draft_data.get("meta", {})
+    draftname = meta.get("draftname", draft_data.get("draftname", ""))
     log     = draft_data.get("log", [])
     players = draft_data.get("players", [])
 
@@ -443,57 +459,6 @@ def bk_confirm():
         mode=mode
     )
 
-'''
-@main.route("/bk_draft", methods=["POST"])
-def bk_draft():
-    num_teams = int(request.form.get("num_teams"))
-    human_teams = request.form.getlist("human_teams")
-    ai_set = request.form.getlist("ai_set")
-    pool = request.form.get("pool")
-    cap = request.form.get("cap")
-    draftname = request.form.get("draftname")
-    selected_player_ids = request.form.getlist("selected_player_ids")
-
-    all_players = load_basketball("full", num_teams)
-
-    if pool == "full":
-        people = all_players
-    else:
-        selected_id_set = set(str(x) for x in selected_player_ids)
-
-        people = [
-            p for p in all_players
-            if str(p.get("ID")) in selected_id_set or str(p.get("id")) in selected_id_set
-        ]
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    output_path = initial_save_basketball_json(people, draftname, timestamp)
-    meta_path = initial_save_basketball_meta_json(
-        draftname,
-        num_teams,
-        human_teams,
-        ai_set,
-        pool,
-        cap,
-        output_path,
-        timestamp
-    )
-    log_path = initial_save_basketball_log_json(draftname, timestamp)
-
-    return render_template(
-        "bkdraft.html",
-        num_teams=num_teams,
-        human_teams=human_teams,
-        ai_set=ai_set,
-        pool=pool,
-        cap=cap,
-        draftname=draftname,
-        players=people,
-        draft_file=output_path
-    )   
-'''
-
 
 @main.route("/bk_draft", methods=["POST"])
 def bk_draft():
@@ -572,6 +537,19 @@ def bk_draft():
         current_team_type=current_team_type,
         sport="bk"
     )
+
+@main.route("/bk_delete", methods=["POST"])
+def bk_delete():
+    filename = request.form.get("delete_draft_file", "").strip()
+    if not filename:
+        abort(400, "No draft file selected.")
+    try:
+        delete_saved_draft(filename, "bk")
+    except FileNotFoundError:
+        abort(404, "Draft file not found.")
+    except ValueError as exc:
+        abort(400, str(exc))
+    return redirect(url_for("main.start_basketball"))
 
 # --------- FOOTBALL -------------------------------------------------------------    
 
@@ -669,6 +647,7 @@ def fb_load():
         abort(400, str(exc))
 
     meta    = draft_data.get("meta", {})
+    draftname = meta.get("draftname", draft_data.get("draftname", ""))
     log     = draft_data.get("log", [])
     players = draft_data.get("players", [])
 
@@ -808,6 +787,19 @@ def fb_draft():
         sport="fb"
     )
 
+@main.route("/fb_delete", methods=["POST"])
+def fb_delete():
+    filename = request.form.get("delete_draft_file", "").strip()
+    if not filename:
+        abort(400, "No draft file selected.")
+    try:
+        delete_saved_draft(filename, "fb")
+    except FileNotFoundError:
+        abort(404, "Draft file not found.")
+    except ValueError as exc:
+        abort(400, str(exc))
+    return redirect(url_for("main.start_football"))
+
 
 # ------ AI CALLS (Baseball) -------------
 
@@ -888,11 +880,6 @@ def make_ai_pick_bb(draftname):
 
 
 def run_ai_picks_bb(draftname):
-    """
-    Runs AI picks back-to-back until a human team is on the clock or the
-    draft is full. Started as a background task so it doesn't block the
-    socket connection that triggered it.
-    """
     while True:
         meta = load_baseball_meta(draftname)
         team = get_team_by_id(meta, meta['current_team_id'])
@@ -904,7 +891,12 @@ def run_ai_picks_bb(draftname):
             break
 
         socketio.emit('pick_made', entry)
-        socketio.sleep(1.5)    
+
+        if is_draft_complete(load_baseball_meta(draftname), 'bb'):
+            socketio.emit('draft_complete', {'draftname': draftname})
+            break
+
+        socketio.sleep(1.5) 
 
 # ------ AI CALLS (Basketball) --------
 
@@ -976,7 +968,6 @@ def make_ai_pick_bk(draftname):
 
 
 def run_ai_picks_bk(draftname):
-    """Basketball equivalent of run_ai_picks_bb."""
     while True:
         meta = load_basketball_meta(draftname)
         team = get_team_by_id(meta, meta['current_team_id'])
@@ -988,6 +979,11 @@ def run_ai_picks_bk(draftname):
             break
 
         socketio.emit('pick_made', entry)
+
+        if is_draft_complete(load_basketball_meta(draftname), 'bk'):
+            socketio.emit('draft_complete', {'draftname': draftname})
+            break
+
         socketio.sleep(1.5)
 
 # ------ AI CALLS (FOOTBALL) --------
@@ -1064,7 +1060,6 @@ def make_ai_pick_fb(draftname):
 
 
 def run_ai_picks_fb(draftname):
-    """Football equivalent of run_ai_picks_bb/bk."""
     while True:
         meta = load_football_meta(draftname)
         team = get_team_by_id(meta, meta['current_team_id'])
@@ -1076,13 +1071,23 @@ def run_ai_picks_fb(draftname):
             break
 
         socketio.emit('pick_made', entry)
+
+        if is_draft_complete(load_football_meta(draftname), 'fb'):
+            socketio.emit('draft_complete', {'draftname': draftname})
+            break
+
         socketio.sleep(1.5)
+
+ROSTER_SIZE = {'bb': 25, 'bk': 10, 'fb': 13}
+
+def is_draft_complete(meta, sport):
+    return meta['current_pick'] > meta['num_teams'] * ROSTER_SIZE[sport]
 
 # ------ SOCKET IO CALLS -------
 
 @socketio.on('make_pick')
 def handle_make_pick(data):
-    print(f">>> make_pick received: {data}")  # ← add this
+    print(f">>> make_pick received: {data}")
     draftname = data['draftname']
     player_id = str(data['player_id'])
     sport     = data.get('sport', 'bb')
@@ -1104,13 +1109,20 @@ def handle_make_pick(data):
         emit('pick_error', {'message': f'Unknown sport: {sport}'})
         return
 
-    print(f">>> meta loaded, pick {meta['current_pick']}, team {meta['current_team_id']}")  # ← add this
-
+    # draft already over
+    if is_draft_complete(meta, sport):
+        emit('pick_error', {'message': 'The draft is over'})
+        return
 
     # pull state from meta
     team_id  = meta['current_team_id']
     team     = get_team_by_id(meta, team_id)
     pick_num = meta['current_pick']
+
+    # only humans pick through this handler
+    if team['type'] != 'human':
+        emit('pick_error', {'message': 'It is not your turn'})
+        return
 
     # load players
     with open(draft_path, "r", encoding="utf-8") as f:
@@ -1118,7 +1130,6 @@ def handle_make_pick(data):
 
     # validate player
     player = next((p for p in players if str(p.get("id")) == player_id), None)
-    print(f">>> player found: {player}")  # ← add this
     if not player:
         emit('pick_error', {'message': 'Player not found'})
         return
@@ -1131,25 +1142,23 @@ def handle_make_pick(data):
     with open(draft_path, "w", encoding="utf-8") as f:
         json.dump(players, f, indent=2)
 
-    # advance pick counter FIRST
+    # advance pick counter
     meta['current_pick'] += 1
     meta['current_team_id'] = get_next_team_id(meta)
-    next_team_id = meta['current_team_id']
-    next_team = get_team_by_id(meta, next_team_id)
+    next_team = get_team_by_id(meta, meta['current_team_id'])
 
-    print(f">>> saving meta: current_pick={meta['current_pick']}, current_team_id={meta['current_team_id']}")
+    # football OL/DL and Special use 'name' instead of FirstName/LastName
+    player_name = player.get('name') or f"{player.get('FirstName', '')} {player.get('LastName', '')}".strip()
 
-
-    # THEN build log entry
     entry = {
-        "pick":      pick_num,
-        "team_id":   team_id,
-        "team":      team['team_name'],
-        "player":    f"{player.get('FirstName')} {player.get('LastName')}",
-        "pos":       player.get('short_pos') or player.get('Pos', ''),
-        "id":        player_id,
-        "next_team": next_team['team_name'],
-        "next_team_type": next_team['type']   # 'human' or 'ai'
+        "pick":           pick_num,
+        "team_id":        team_id,
+        "team":           team['team_name'],
+        "player":         player_name,
+        "pos":            player.get('short_pos') or player.get('Pos', ''),
+        "id":             player_id,
+        "next_team":      next_team['team_name'],
+        "next_team_type": next_team['type']
     }
     append_to_log(log_path, entry)
 
@@ -1161,16 +1170,20 @@ def handle_make_pick(data):
     elif sport == 'fb':
         save_football_meta(draftname, meta)
 
-    print(f">>> meta saved for {draftname}")
-    # broadcast
-    print(f">>> emitting pick_made: {entry}")
     socketio.emit('pick_made', entry)
-    if sport == 'bb' and next_team['type'] == 'ai':
-        socketio.start_background_task(run_ai_picks_bb, draftname)
-    elif sport == 'bk' and next_team['type'] == 'ai':
-        socketio.start_background_task(run_ai_picks_bk, draftname)
-    elif sport == 'fb' and next_team['type'] == 'ai':
-        socketio.start_background_task(run_ai_picks_fb, draftname)
+
+    # that was the last pick: announce it and don't start any more AI picks
+    if is_draft_complete(meta, sport):
+        socketio.emit('draft_complete', {'draftname': draftname})
+        return
+
+    if next_team['type'] == 'ai':
+        if sport == 'bb':
+            socketio.start_background_task(run_ai_picks_bb, draftname)
+        elif sport == 'bk':
+            socketio.start_background_task(run_ai_picks_bk, draftname)
+        elif sport == 'fb':
+            socketio.start_background_task(run_ai_picks_fb, draftname)
 
 @socketio.on('skip_pick')
 def handle_skip_pick(data):
@@ -1186,6 +1199,9 @@ def handle_skip_pick(data):
 
         # if the next team up is AI, keep the picks rolling
         meta      = load_baseball_meta(draftname)
+        if is_draft_complete(meta, 'bb'):
+            socketio.emit('draft_complete', {'draftname': draftname})
+            return
         next_team = get_team_by_id(meta, meta['current_team_id'])
         if next_team and next_team['type'] == 'ai':
             socketio.start_background_task(run_ai_picks_bb, draftname)
@@ -1200,6 +1216,9 @@ def handle_skip_pick(data):
         socketio.emit('pick_made', entry)
 
         meta      = load_basketball_meta(draftname)
+        if is_draft_complete(meta, 'bk'):
+            socketio.emit('draft_complete', {'draftname': draftname})
+            return
         next_team = get_team_by_id(meta, meta['current_team_id'])
         if next_team and next_team['type'] == 'ai':
             socketio.start_background_task(run_ai_picks_bk, draftname)
@@ -1214,23 +1233,15 @@ def handle_skip_pick(data):
         socketio.emit('pick_made', entry)
 
         meta      = load_football_meta(draftname)
+        if is_draft_complete(meta, 'fb'):
+            socketio.emit('draft_complete', {'draftname': draftname})
+            return
         next_team = get_team_by_id(meta, meta['current_team_id'])
         if next_team and next_team['type'] == 'ai':
             socketio.start_background_task(run_ai_picks_fb, draftname)
         return
     else:
         return
-
-    meta['current_pick'] += 1
-    meta['current_team_id'] = get_next_team_id(meta)
-    next_team = get_team_by_id(meta, meta['current_team_id'])
-
-    save_football_meta(draftname, meta)
-
-    socketio.emit('pick_skipped', {
-        'next_team':      next_team['team_name'],
-        'next_team_type': next_team['type']
-    })
 
 
 
