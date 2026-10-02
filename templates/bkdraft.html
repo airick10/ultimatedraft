@@ -68,6 +68,7 @@ socket.on('pick_made', (entry) => {
         el.className = 'log-entry';
         el.textContent = `${entry.pick}. ${entry.team} — ${entry.pos} ${entry.player}`;
         logDiv.appendChild(el);
+        scrollLogToBottom();
     }
 
     // update roster slot for the team that just picked
@@ -137,6 +138,7 @@ socket.on('full_sync', (data) => {
                 logDiv.appendChild(el);
             });
         }
+        scrollLogToBottom();
     }
 
     data.log.forEach(entry => {
@@ -171,6 +173,7 @@ socket.on('draft_complete', showDraftComplete);
 
 // ── DOM ready ──
 document.addEventListener('DOMContentLoaded', () => {
+    scrollLogToBottom();
     // show first team roster on load
     const first = document.querySelector('.roster-team');
     if (first) first.style.display = 'block';
@@ -314,6 +317,11 @@ function showDraftComplete() {
     document.getElementById('draftBtn').style.display = 'none';
     document.getElementById('clockTeam').textContent = 'Draft complete';
 }
+
+function scrollLogToBottom() {
+    const pane = document.querySelector('.pane-left');
+    if (pane) pane.scrollTop = pane.scrollHeight;
+}
 </script>
 {% endblock %}
 
@@ -405,12 +413,12 @@ function showDraftComplete() {
                     <td class="pos-badge">{{ p.Pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
                     <td class="team-cell">
-                      {% if p.Team %}
+                      {% if p.Team_Logo %}
                       <img class="team-logo"
-                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/seal/basketball/{{ p.Team }}.png"
-                           alt="{{ p.Team }}" title="{{ p.Team }}"
+                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/basketball/{{ p.Team_Logo }}.png"
+                           alt="{{ p.Team_Logo }}" title="{{ p.Team_Logo }}"
                            onerror="this.style.display='none'; this.nextElementSibling.classList.remove('visually-hidden');">
-                      <span class="visually-hidden">{{ p.Team }}</span>
+                      <span class="visually-hidden">{{ p.Team_Logo }}</span>
                       {% endif %}
                     </td>
                     <td class="stat-real">{{ p.ptspgm if p.ptspgm is defined else '—' }}</td>

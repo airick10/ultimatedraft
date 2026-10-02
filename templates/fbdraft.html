@@ -66,6 +66,7 @@ socket.on('pick_made', (entry) => {
         el.className = 'log-entry';
         el.textContent = `${entry.pick}. ${entry.team} — ${entry.pos} ${entry.player}`;
         logDiv.appendChild(el);
+        scrollLogToBottom();
     }
 
     // update roster slot for the team that just picked
@@ -135,6 +136,7 @@ socket.on('full_sync', (data) => {
                 logDiv.appendChild(el);
             });
         }
+        scrollLogToBottom();
     }
 
     data.log.forEach(entry => {
@@ -169,6 +171,7 @@ socket.on('draft_complete', showDraftComplete);
 
 // ── DOM ready ──
 document.addEventListener('DOMContentLoaded', () => {
+    scrollLogToBottom();
     // show first team roster on load
     const first = document.querySelector('.roster-team');
     if (first) first.style.display = 'block';
@@ -330,6 +333,11 @@ function showDraftComplete() {
     document.getElementById('draftBtn').style.display = 'none';
     document.getElementById('clockTeam').textContent = 'Draft complete';
 }
+
+function scrollLogToBottom() {
+    const pane = document.querySelector('.pane-left');
+    if (pane) pane.scrollTop = pane.scrollHeight;
+}
 </script>
 {% endblock %}
 
@@ -488,7 +496,7 @@ function showDraftComplete() {
                 <td class="team-cell">
                   {% if p.TM %}
                   <img class="team-logo"
-                       src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/seal/football/{{ p.TM }}.png"
+                       src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/football/{{ p.TM }}.png"
                        alt="{{ p.TM }}" title="{{ p.TM }}"
                        onerror="this.style.display='none'; this.nextElementSibling.classList.remove('visually-hidden');">
                   <span class="visually-hidden">{{ p.TM }}</span>
@@ -512,7 +520,7 @@ function showDraftComplete() {
                     <td class="team-cell">
                       {% if p.TM %}
                       <img class="team-logo"
-                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/seal/football/{{ p.TM }}.png"
+                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/football/{{ p.TM }}.png"
                            alt="{{ p.TM }}" title="{{ p.TM }}"
                            onerror="this.style.display='none'; this.nextElementSibling.classList.remove('visually-hidden');">
                       <span class="visually-hidden">{{ p.TM }}</span>
@@ -536,7 +544,7 @@ function showDraftComplete() {
                     <td class="team-cell">
                       {% if p.TM %}
                       <img class="team-logo"
-                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/seal/football/{{ p.TM }}.png"
+                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/football/{{ p.TM }}.png"
                            alt="{{ p.TM }}" title="{{ p.TM }}"
                            onerror="this.style.display='none'; this.nextElementSibling.classList.remove('visually-hidden');">
                       <span class="visually-hidden">{{ p.TM }}</span>
@@ -558,12 +566,12 @@ function showDraftComplete() {
                     <td class="pos-badge">{{ p.short_pos }}</td>
                     <td>{{ p.name }}</td>
                     <td class="team-cell">
-                      {% if p.Team %}
+                      {% if p.Team_Logo %}
                       <img class="team-logo"
-                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/seal/football/{{ p.Team }}.png"
-                           alt="{{ p.Team }}" title="{{ p.Team }}"
+                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/football/{{ p.Team_Logo }}.png"
+                           alt="{{ p.Team_Logo }}" title="{{ p.Team_Logo }}"
                            onerror="this.style.display='none'; this.nextElementSibling.classList.remove('visually-hidden');">
-                      <span class="visually-hidden">{{ p.Team }}</span>
+                      <span class="visually-hidden">{{ p.Team_Logo }}</span>
                       {% endif %}
                     </td>
                     <td class="stat-real">{{ p.s_YdspPlay if p.s_YdspPlay is defined else '—' }}</td>
@@ -582,12 +590,12 @@ function showDraftComplete() {
                     <td class="pos-badge">{{ p.short_pos }}</td>
                     <td>{{ p.name }}</td>
                     <td class="team-cell">
-                      {% if p.Team %}
+                      {% if p.Team_Logo %}
                       <img class="team-logo"
-                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/seal/football/{{ p.Team }}.png"
-                           alt="{{ p.Team }}" title="{{ p.Team }}"
+                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/football/{{ p.Team_Logo }}.png"
+                           alt="{{ p.Team_Logo }}" title="{{ p.Team_Logo }}"
                            onerror="this.style.display='none'; this.nextElementSibling.classList.remove('visually-hidden');">
-                      <span class="visually-hidden">{{ p.Team }}</span>
+                      <span class="visually-hidden">{{ p.Team_Logo }}</span>
                       {% endif %}
                     </td>
                     <td class="stat-real">{{ p.s_KO_Avg if p.s_KO_Avg is defined else '—' }}</td>

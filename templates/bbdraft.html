@@ -66,6 +66,7 @@ socket.on('pick_made', (entry) => {
         el.className = 'log-entry';
         el.textContent = `${entry.pick}. ${entry.team} — ${entry.pos} ${entry.player}`;
         logDiv.appendChild(el);
+        scrollLogToBottom();
     }
 
     // update roster slot for the team that just picked
@@ -136,6 +137,7 @@ socket.on('full_sync', (data) => {
                 logDiv.appendChild(el);
             });
         }
+        scrollLogToBottom();
     }
 
     data.log.forEach(entry => {
@@ -170,6 +172,7 @@ socket.on('draft_complete', showDraftComplete);
 
 // ── DOM ready ──
 document.addEventListener('DOMContentLoaded', () => {
+    scrollLogToBottom();
     // show first team roster on load
     const first = document.querySelector('.roster-team');
     if (first) first.style.display = 'block';
@@ -325,6 +328,10 @@ function showDraftComplete() {
     document.getElementById('clockTeam').textContent = 'Draft complete';
 }
 
+function scrollLogToBottom() {
+    const pane = document.querySelector('.pane-left');
+    if (pane) pane.scrollTop = pane.scrollHeight;
+}
 
 </script>
 {% endblock %}
