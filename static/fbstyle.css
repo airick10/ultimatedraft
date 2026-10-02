@@ -64,6 +64,25 @@
   /* ── Main 3-pane row ── */
   .draft-body { display:flex; height:calc(100vh - 155px); overflow:hidden; }
 
+  .ticker-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.btn-toggle-draft {
+    background: #39ff14;
+    border: none;
+    color: #000;
+    font-weight: 700;
+    font-size: .75rem;
+    padding: 4px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.btn-toggle-draft:hover { background: #2ecc0f; }
+.btn-toggle-draft.running { background: #ff4444; color: #fff; }
+.btn-toggle-draft.running:hover { background: #cc3333; }
+
   /* ── Left pane — all team rosters ── */
   .pane-left {
     width:200px;
