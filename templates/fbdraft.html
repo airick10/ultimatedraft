@@ -21,6 +21,9 @@ let selectedPlayerId = null;
 let sortDir = {};
 let pickTimer = null;
 let timeLeft  = 0;
+let draftRunning  = false;
+let draftComplete = false;
+let hasPicks      = {{ 'true' if draft_log else 'false' }};
 
 // ── SocketIO connection ──
 socket.on('connect', () => {
@@ -43,9 +46,11 @@ function draftPlayer() {
 }
 
 // ── Receive pick from server ──
-// ── Receive pick from server ──
 socket.on('pick_made', (entry) => {
     console.log('Pick made:', entry);
+
+    hasPicks = true;
+    updateToggleBtn();
 
     // mark player row as drafted
     const row = document.querySelector(`tr[data-id="${entry.id}"]`);
@@ -106,7 +111,7 @@ socket.on('pick_made', (entry) => {
         announcement.textContent = `${entry.team} select ${entry.pos} — ${entry.player}`;
     }
 
-    // start timer based on next team type
+    // reset the clock for the next team (it only ticks if the draft is running)
     const isHuman = entry.next_team_type === 'human';
     startTimer(isHuman ? 120 : 15);
 });
@@ -119,6 +124,11 @@ socket.on('pick_error', (data) => {
 
 socket.on('full_sync', (data) => {
     console.log('Full sync received:', data);
+
+    // NEW: restore button state (matters on page refresh)
+    draftRunning = !!data.running;
+    hasPicks     = data.log.length > 0;
+    updateToggleBtn();
 
     const logDiv = document.getElementById('draftLog');
     if (logDiv) {
@@ -154,18 +164,30 @@ socket.on('full_sync', (data) => {
         showRoster(data.current_team);
     }
 
-    startTimer(data.current_team_type === 'human' ? 120 : 15);
+    // NEW: finished drafts show the complete state instead of a dead timer
+    if (data.complete) {
+        showDraftComplete();
+    } else {
+        startTimer(data.current_team_type === 'human' ? 120 : 15);
+    }
 });
 
-socket.on('draft_complete', () => {
-    clearInterval(pickTimer);
-    const announcement = document.getElementById('tickerAnnouncement');
-    if (announcement) announcement.textContent = 'Draft complete!';
-    const timer = document.getElementById('tickerTimer');
-    if (timer) timer.textContent = '--';
-    document.getElementById('draftBtn').style.display = 'none';
-    document.getElementById('clockTeam').textContent = 'Draft complete';
+
+socket.on('draft_state', (data) => {
+    console.log('draft_state received:', data, 'currentDraftname:', currentDraftname);
+    if (data.draftname !== currentDraftname) {
+        console.warn('draft_state ignored: draftname mismatch');
+        return;
+    }
+    draftRunning = data.running;
+    if (draftRunning) {
+        runClock();
+    } else {
+        clearInterval(pickTimer);
+    }
+    updateToggleBtn();
 });
+
 
 socket.on('draft_complete', showDraftComplete);
 
@@ -278,6 +300,11 @@ function startTimer(seconds) {
     clearInterval(pickTimer);
     timeLeft = seconds;
     updateTimerDisplay();
+    if (draftRunning) runClock();   // paused drafts just show the time, no ticking
+}
+
+function runClock() {
+    clearInterval(pickTimer);
     pickTimer = setInterval(() => {
         timeLeft--;
         updateTimerDisplay();
@@ -286,6 +313,24 @@ function startTimer(seconds) {
             skipPick();
         }
     }, 1000);
+}
+
+function updateToggleBtn() {
+    const btn = document.getElementById('draftToggleBtn');
+    if (!btn) return;
+    if (draftComplete) {
+        btn.style.display = 'none';
+        return;
+    }
+    btn.textContent = draftRunning ? 'Stop Draft' : (hasPicks ? 'Resume Draft' : 'Start Draft');
+    btn.classList.toggle('running', draftRunning);
+}
+
+function toggleDraft() {
+    socket.emit(draftRunning ? 'pause_draft' : 'start_draft', {
+        draftname: currentDraftname,
+        sport:     currentSport
+    });
 }
 
 function updateTimerDisplay() {
@@ -325,6 +370,9 @@ function mapPosToSlot(pos) {
 }
 
 function showDraftComplete() {
+    draftComplete = true;
+    draftRunning  = false;
+    updateToggleBtn();
     clearInterval(pickTimer);
     const announcement = document.getElementById('tickerAnnouncement');
     if (announcement) announcement.textContent = 'Draft complete! 🎉';
@@ -333,7 +381,6 @@ function showDraftComplete() {
     document.getElementById('draftBtn').style.display = 'none';
     document.getElementById('clockTeam').textContent = 'Draft complete';
 }
-
 function scrollLogToBottom() {
     const pane = document.querySelector('.pane-left');
     if (pane) pane.scrollTop = pane.scrollHeight;
@@ -367,7 +414,10 @@ function scrollLogToBottom() {
 <!-- Draft Ticker -->
 <div class="draft-ticker">
     <div class="ticker-announcement" id="tickerAnnouncement">Draft starting...</div>
+    <div class="ticker-controls">
+    <button id="draftToggleBtn" class="btn-toggle-draft" onclick="toggleDraft()">{{ 'Resume Draft' if draft_log else 'Start Draft' }}</button>
     <div class="ticker-timer" id="tickerTimer">2:00</div>
+</div>
 </div>
 
 <!-- ── 3-pane Draft Body ── -->
