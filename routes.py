@@ -126,9 +126,6 @@ def bb_load():
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
     current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
     current_team_type = current_team_obj['type'] if current_team_obj else 'human'
-    # if the draft opens with an AI team on the clock, get it picking
-    if current_team_type == 'ai':
-        socketio.start_background_task(run_ai_picks_bb, draftname)
 
     return render_template(
         "bbdraft.html",
@@ -273,9 +270,6 @@ def bb_draft():
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
     current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
     current_team_type = current_team_obj['type'] if current_team_obj else 'human'
-    # if the draft opens with an AI team on the clock, get it picking
-    if current_team_type == 'ai':
-        socketio.start_background_task(run_ai_picks_bb, draftname)
 
     return render_template(
         "bbdraft.html",
@@ -373,8 +367,6 @@ def bk_load():
     current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
     current_team_type = current_team_obj['type'] if current_team_obj else 'human'
 
-    if current_team_type == 'ai':
-        socketio.start_background_task(run_ai_picks_bk, draftname)
 
     return render_template(
         "bkdraft.html",
@@ -517,9 +509,6 @@ def bk_draft():
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
     current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
     current_team_type = current_team_obj['type'] if current_team_obj else 'human'
-
-    if current_team_type == 'ai':
-        socketio.start_background_task(run_ai_picks_bk, draftname)
 
     return render_template(
         "bkdraft.html",
@@ -683,9 +672,7 @@ def fb_load():
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
     current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
     current_team_type = current_team_obj['type'] if current_team_obj else 'human'
-    # if the draft opens with an AI team on the clock, get it picking
-    if current_team_type == 'ai':
-        socketio.start_background_task(run_ai_picks_fb, draftname)
+
 
     return render_template(
         "fbdraft.html",
@@ -766,9 +753,6 @@ def fb_draft():
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
     current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
     current_team_type = current_team_obj['type'] if current_team_obj else 'human'
-    # if the draft opens with an AI team on the clock, get it picking
-    if current_team_type == 'ai':
-        socketio.start_background_task(run_ai_picks_fb, draftname)
 
     return render_template(
         "fbdraft.html",
@@ -880,23 +864,30 @@ def make_ai_pick_bb(draftname):
 
 
 def run_ai_picks_bb(draftname):
-    while True:
-        meta = load_baseball_meta(draftname)
-        team = get_team_by_id(meta, meta['current_team_id'])
-        if not team or team['type'] != 'ai':
-            break
+    key = (draftname, 'bb')
+    if key in AI_LOOPS:
+        return
+    AI_LOOPS.add(key)
+    try:
+        while key in RUNNING_DRAFTS:
+            meta = load_baseball_meta(draftname)
+            team = get_team_by_id(meta, meta['current_team_id'])
+            if not team or team['type'] != 'ai':
+                break
 
-        entry = make_ai_pick_bb(draftname)
-        if entry is None:
-            break
+            entry = make_ai_pick_bb(draftname)
+            if entry is None:
+                break
 
-        socketio.emit('pick_made', entry)
+            socketio.emit('pick_made', entry)
 
-        if is_draft_complete(load_baseball_meta(draftname), 'bb'):
-            socketio.emit('draft_complete', {'draftname': draftname})
-            break
+            if is_draft_complete(load_baseball_meta(draftname), 'bb'):
+                socketio.emit('draft_complete', {'draftname': draftname})
+                break
 
-        socketio.sleep(1.5) 
+            socketio.sleep(1.5)
+    finally:
+        AI_LOOPS.discard(key)
 
 # ------ AI CALLS (Basketball) --------
 
@@ -968,23 +959,30 @@ def make_ai_pick_bk(draftname):
 
 
 def run_ai_picks_bk(draftname):
-    while True:
-        meta = load_basketball_meta(draftname)
-        team = get_team_by_id(meta, meta['current_team_id'])
-        if not team or team['type'] != 'ai':
-            break
+    key = (draftname, 'bk')
+    if key in AI_LOOPS:
+        return
+    AI_LOOPS.add(key)
+    try:
+        while key in RUNNING_DRAFTS:
+            meta = load_basketball_meta(draftname)
+            team = get_team_by_id(meta, meta['current_team_id'])
+            if not team or team['type'] != 'ai':
+                break
 
-        entry = make_ai_pick_bk(draftname)
-        if entry is None:
-            break
+            entry = make_ai_pick_bk(draftname)
+            if entry is None:
+                break
 
-        socketio.emit('pick_made', entry)
+            socketio.emit('pick_made', entry)
 
-        if is_draft_complete(load_basketball_meta(draftname), 'bk'):
-            socketio.emit('draft_complete', {'draftname': draftname})
-            break
+            if is_draft_complete(load_basketball_meta(draftname), 'bk'):
+                socketio.emit('draft_complete', {'draftname': draftname})
+                break
 
-        socketio.sleep(1.5)
+            socketio.sleep(1.5)
+    finally:
+        AI_LOOPS.discard(key)
 
 # ------ AI CALLS (FOOTBALL) --------
 
@@ -1060,25 +1058,35 @@ def make_ai_pick_fb(draftname):
 
 
 def run_ai_picks_fb(draftname):
-    while True:
-        meta = load_football_meta(draftname)
-        team = get_team_by_id(meta, meta['current_team_id'])
-        if not team or team['type'] != 'ai':
-            break
+    key = (draftname, 'fb')
+    if key in AI_LOOPS:
+        return
+    AI_LOOPS.add(key)
+    try:
+        while key in RUNNING_DRAFTS:
+            meta = load_football_meta(draftname)
+            team = get_team_by_id(meta, meta['current_team_id'])
+            if not team or team['type'] != 'ai':
+                break
 
-        entry = make_ai_pick_fb(draftname)
-        if entry is None:
-            break
+            entry = make_ai_pick_fb(draftname)
+            if entry is None:
+                break
 
-        socketio.emit('pick_made', entry)
+            socketio.emit('pick_made', entry)
 
-        if is_draft_complete(load_football_meta(draftname), 'fb'):
-            socketio.emit('draft_complete', {'draftname': draftname})
-            break
+            if is_draft_complete(load_football_meta(draftname), 'fb'):
+                socketio.emit('draft_complete', {'draftname': draftname})
+                break
 
-        socketio.sleep(1.5)
+            socketio.sleep(1.5)
+    finally:
+        AI_LOOPS.discard(key)
 
 ROSTER_SIZE = {'bb': 25, 'bk': 10, 'fb': 13}
+
+RUNNING_DRAFTS = set()   # {(draftname, sport), ...}  drafts that are currently live
+AI_LOOPS       = set()   # {(draftname, sport), ...}  prevents duplicate AI loops
 
 def is_draft_complete(meta, sport):
     return meta['current_pick'] > meta['num_teams'] * ROSTER_SIZE[sport]
@@ -1112,6 +1120,11 @@ def handle_make_pick(data):
     # draft already over
     if is_draft_complete(meta, sport):
         emit('pick_error', {'message': 'The draft is over'})
+        return
+
+    # NEW: draft is paused / not started
+    if (draftname, sport) not in RUNNING_DRAFTS:
+        emit('pick_error', {'message': 'The draft is paused. Hit Start/Resume first.'})
         return
 
     # pull state from meta
@@ -1190,6 +1203,10 @@ def handle_skip_pick(data):
     draftname = data['draftname']
     sport     = data.get('sport', 'bb')
 
+    # NEW: ignore timeouts when the draft is paused
+    if (draftname, sport) not in RUNNING_DRAFTS:
+        return
+
     if sport == 'bb':
         entry = make_ai_pick_bb(draftname)
         if entry is None:
@@ -1197,17 +1214,16 @@ def handle_skip_pick(data):
 
         socketio.emit('pick_made', entry)
 
-        # if the next team up is AI, keep the picks rolling
-        meta      = load_baseball_meta(draftname)
+        meta = load_baseball_meta(draftname)
         if is_draft_complete(meta, 'bb'):
             socketio.emit('draft_complete', {'draftname': draftname})
             return
+
         next_team = get_team_by_id(meta, meta['current_team_id'])
         if next_team and next_team['type'] == 'ai':
             socketio.start_background_task(run_ai_picks_bb, draftname)
         return
 
-    # basketball
     elif sport == 'bk':
         entry = make_ai_pick_bk(draftname)
         if entry is None:
@@ -1215,16 +1231,16 @@ def handle_skip_pick(data):
 
         socketio.emit('pick_made', entry)
 
-        meta      = load_basketball_meta(draftname)
+        meta = load_basketball_meta(draftname)
         if is_draft_complete(meta, 'bk'):
             socketio.emit('draft_complete', {'draftname': draftname})
             return
+
         next_team = get_team_by_id(meta, meta['current_team_id'])
         if next_team and next_team['type'] == 'ai':
             socketio.start_background_task(run_ai_picks_bk, draftname)
         return
 
-    # football
     elif sport == 'fb':
         entry = make_ai_pick_fb(draftname)
         if entry is None:
@@ -1232,14 +1248,16 @@ def handle_skip_pick(data):
 
         socketio.emit('pick_made', entry)
 
-        meta      = load_football_meta(draftname)
+        meta = load_football_meta(draftname)
         if is_draft_complete(meta, 'fb'):
             socketio.emit('draft_complete', {'draftname': draftname})
             return
+
         next_team = get_team_by_id(meta, meta['current_team_id'])
         if next_team and next_team['type'] == 'ai':
             socketio.start_background_task(run_ai_picks_fb, draftname)
         return
+
     else:
         return
 
@@ -1271,4 +1289,38 @@ def handle_request_sync(data):
         'log': log,
         'current_team': current_team['team_name'] if current_team else '',
         'current_team_type': current_team['type'] if current_team else 'human',
+        'running': (draftname, sport) in RUNNING_DRAFTS,
+        'complete': is_draft_complete(meta, sport),
     })
+
+META_LOADERS = {'bb': load_baseball_meta, 'bk': load_basketball_meta, 'fb': load_football_meta}
+AI_RUNNERS   = {'bb': run_ai_picks_bb,    'bk': run_ai_picks_bk,      'fb': run_ai_picks_fb}
+
+
+@socketio.on('start_draft')
+def handle_start_draft(data):
+    draftname = data['draftname']
+    sport     = data.get('sport', 'bb')
+    if sport not in META_LOADERS:
+        return
+
+    meta = META_LOADERS[sport](draftname)
+    if is_draft_complete(meta, sport):
+        socketio.emit('draft_complete', {'draftname': draftname})
+        return
+
+    RUNNING_DRAFTS.add((draftname, sport))
+    socketio.emit('draft_state', {'draftname': draftname, 'running': True})
+
+    # if an AI team is on the clock, get it picking
+    team = get_team_by_id(meta, meta['current_team_id'])
+    if team and team['type'] == 'ai':
+        socketio.start_background_task(AI_RUNNERS[sport], draftname)
+
+
+@socketio.on('pause_draft')
+def handle_pause_draft(data):
+    draftname = data['draftname']
+    sport     = data.get('sport', 'bb')
+    RUNNING_DRAFTS.discard((draftname, sport))
+    socketio.emit('draft_state', {'draftname': draftname, 'running': False})
