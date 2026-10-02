@@ -106,6 +106,12 @@
     font-size: .72rem;
     margin-bottom: 10px;
 }
+.pane-left h6 {
+    position: sticky;
+    top: -10px;      /* offsets the pane's 10px top padding */
+    background: #111;
+    z-index: 1;
+}
 
   /* ── Center pane — player pool ── */
 .pane-center {

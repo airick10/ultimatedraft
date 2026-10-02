@@ -105,6 +105,12 @@
     padding:1px 0;
 }
 .roster-team .t-pick.filled { color:#c9a84c; }
+.pane-left h6 {
+    position: sticky;
+    top: -10px;      /* offsets the pane's 10px top padding */
+    background: #111;
+    z-index: 1;
+}
 
 /* ── Center pane ── */
 .pane-center {
