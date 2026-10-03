@@ -2,11 +2,19 @@
 {% block title %}Football Draft{% endblock %}
 {% block scripts %}
   {{ super() }}
-  <script>
+    <script>
     document.addEventListener("change", function(e) {
       if (e.target.name === "human_teams") {
         const anyChecked = document.querySelectorAll('input[name="human_teams"]:checked').length > 0;
         document.getElementById("draft-options").style.display = anyChecked ? "block" : "none";
+      }
+    });
+
+    document.addEventListener("change", function(e) {
+      if (e.target.name === "cap") {
+        const yes = document.getElementById("yes").checked;
+        document.getElementById("cap-amount-wrap").style.display = yes ? "block" : "none";
+        document.getElementById("cap_amount").required = yes;
       }
     });
   </script>
@@ -136,8 +144,13 @@
       <input type="radio" id="yes" name="cap" value="Yes">
       <label for="yes">Yes</label>
 
-      <input type="radio" id="no" name="cap" value="No">
+      <input type="radio" id="no" name="cap" value="No" checked>
       <label for="no">No</label>
+
+      <div id="cap-amount-wrap" style="display:none; margin-top:10px;">
+        <label for="cap_amount" class="text-light">Cap amount ($)</label>
+        <input type="number" name="cap_amount" id="cap_amount" min="1" step="1" placeholder="e.g. 100000000">
+      </div>
 
       <p></p>
 

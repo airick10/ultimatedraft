@@ -30,6 +30,10 @@ const TOTAL_PICKS = DRAFT_TEAMS.length * ROSTER_SIZE;
 const STRIP_SIZE  = 8;
 let currentPick   = {{ draft_log|length + 1 }};      // the pick number now on the clock
 const logoEls     = new Map();                        // key ("p12" for a pick, "d3" for a round divider) -> DOM element
+const SALARY_CAP  = parseFloat("{{ cap }}") || 0;      // 0 = no cap
+const INITIAL_LOG = {{ draft_log|tojson }};
+const salaryById  = {};     // player id -> salary
+const spentByTeam = {};     // team name -> total salary drafted
 
 // ── SocketIO connection ──
 socket.on('connect', () => {
@@ -55,6 +59,8 @@ function draftPlayer() {
 socket.on('pick_made', (entry) => {
     console.log('Pick made:', entry);
     currentPick = entry.pick + 1;
+    addSpend(entry);
+    if (entry.bonus) addSpend(entry.bonus);
     hasPicks = true;
     updateToggleBtn();
 
@@ -130,6 +136,7 @@ socket.on('pick_error', (data) => {
 
 socket.on('full_sync', (data) => {
     console.log('Full sync received:', data);
+    rebuildSpend(data.log);
     currentPick = data.log.length + 1;
     // NEW: restore button state (matters on page refresh)
     draftRunning = !!data.running;
@@ -201,6 +208,9 @@ socket.on('draft_complete', showDraftComplete);
 document.addEventListener('DOMContentLoaded', () => {
     renderLogoStrip();
     scrollLogToBottom();
+    buildSalaryMap();
+    rebuildSpend(INITIAL_LOG);
+    updateSalaryLine();
     // show first team roster on load
     const first = document.querySelector('.roster-team');
     if (first) first.style.display = 'block';
@@ -292,6 +302,7 @@ function filterPos(btn, pos) {
 function showRoster(teamName) {
     document.querySelectorAll('.roster-team').forEach(el => el.style.display = 'none');
     document.getElementById(`roster-${teamName}`).style.display = 'block';
+    updateSalaryLine(teamName);
 }
 
 // -- Highlighting Current Drafting Team --
@@ -524,6 +535,44 @@ function renderLogoStrip() {
         }
     });
 }
+
+function parseSalaryText(v) {
+    return parseFloat(String(v || '').replace(/[$,\s]/g, '')) || 0;
+}
+
+function formatMoney(n) {
+    return (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
+}
+
+function buildSalaryMap() {
+    document.querySelectorAll('#playerBody tr').forEach(row => {
+        salaryById[row.dataset.id] = parseSalaryText(row.dataset.sal);
+    });
+}
+
+function addSpend(e) {
+    spentByTeam[e.team] = (spentByTeam[e.team] || 0) + (salaryById[String(e.id)] || 0);
+}
+
+function rebuildSpend(log) {
+    Object.keys(spentByTeam).forEach(k => delete spentByTeam[k]);
+    log.forEach(addSpend);
+}
+
+function updateSalaryLine(teamName) {
+    const el = document.getElementById('salaryLeft');
+    if (!el) return;
+    if (!SALARY_CAP) {
+        el.style.display = 'none';
+        return;
+    }
+    const select = document.getElementById('rosterSelect');
+    const team = teamName || (select ? select.value : '');
+    const left = SALARY_CAP - (spentByTeam[team] || 0);
+    el.textContent = `Salary left: ${formatMoney(left)}`;
+    el.classList.toggle('over', left < 0);
+    el.style.display = 'block';
+}
 </script>
 {% endblock %}
 
@@ -668,7 +717,7 @@ function renderLogoStrip() {
       <tbody id="playerBody">
           {% for p in players %}
           {% if p.kind == "passer" %}
-            <tr data-pos="{{ p.short_pos }}" data-kind="passer" data-id="{{ p.id }}">
+            <tr data-pos="{{ p.short_pos }}" data-kind="passer" data-id="{{ p.id }}" data-sal="{{ p.Salary }}">
                 <td class="pos-badge">{{ p.short_pos }}</td>
                 <td>{{ p.FirstName }} {{ p.LastName }}</td>
                 <td class="team-cell">
@@ -692,7 +741,7 @@ function renderLogoStrip() {
                 <td class="stat-strat" style="display:none">{{ p.s_MR if p.s_MR is defined else '—' }}</td>
             </tr>
             {% elif p.kind == "rusher" %}
-                <tr data-pos="{{ p.short_pos }}" data-kind="rusher" data-id="{{ p.id }}">
+                <tr data-pos="{{ p.short_pos }}" data-kind="rusher" data-id="{{ p.id }}" data-sal="{{ p.Salary }}">
                     <td class="pos-badge">{{ p.short_pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
                     <td class="team-cell">
@@ -716,7 +765,7 @@ function renderLogoStrip() {
                     <td class="stat-strat" style="display:none">{{ p['s_SPR-C'] if p['s_SPR-C'] is defined else '—' }}</td>
                 </tr>
             {% elif p.kind == "receiver" %}
-                <tr data-pos="{{ p.short_pos }}" data-kind="receiver" data-id="{{ p.id }}" style="display:none">
+                <tr data-pos="{{ p.short_pos }}" data-kind="receiver" data-id="{{ p.id }}" data-sal="{{ p.Salary }}" style="display:none">
                     <td class="pos-badge">{{ p.short_pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
                     <td class="team-cell">
@@ -740,7 +789,7 @@ function renderLogoStrip() {
                     <td class="stat-strat" style="display:none">{{ p['s_LPR-Y'] if p['s_LPR-Y'] is defined else '—' }}</td>
                 </tr>
                 {% elif p.kind == "dlineoline" %}
-                <tr data-pos="{{ p.short_pos }}" data-kind="dlineoline" data-id="{{ p.id }}" style="display:none">
+                <tr data-pos="{{ p.short_pos }}" data-kind="dlineoline" data-id="{{ p.id }}" data-sal="{{ p.Salary }}" style="display:none">
                     <td class="pos-badge">{{ p.short_pos }}</td>
                     <td>{{ p.name }}</td>
                     <td class="team-cell">
@@ -764,7 +813,7 @@ function renderLogoStrip() {
                     <td class="stat-strat" style="display:none">{{ p.s_Pass if p.s_Pass is defined else '—' }}</td>
                 </tr>
                 {% else %}
-                <tr data-pos="{{ p.short_pos }}" data-kind="special" data-id="{{ p.id }}" style="display:none">
+                <tr data-pos="{{ p.short_pos }}" data-kind="special" data-id="{{ p.id }}" data-sal="{{ p.Salary }}" style="display:none">
                     <td class="pos-badge">{{ p.short_pos }}</td>
                     <td>{{ p.name }}</td>
                     <td class="team-cell">
@@ -815,6 +864,7 @@ function renderLogoStrip() {
     </option>
     {% endfor %}
 </select>
+    <div class="salary-left" id="salaryLeft" style="display:none"></div>
 
     {% for team in all_teams %}
 <div class="roster-team" id="roster-{{ team.name }}" style="display:none">

@@ -28,8 +28,12 @@ const DRAFT_TEAMS = {{ all_teams|tojson }};          // teams in draft order
 const ROSTER_SIZE = {{ roster_slots|length }};
 const TOTAL_PICKS = DRAFT_TEAMS.length * ROSTER_SIZE;
 const STRIP_SIZE  = 8;
-let currentPick   = {{ draft_log|length + 1 }};      // the pick number now on the clock
+let currentPick   = {{ current_pick }};      // the pick number now on the clock
 const logoEls     = new Map();                        // key ("p12" for a pick, "d3" for a round divider) -> DOM element
+const SALARY_CAP  = parseFloat("{{ cap }}") || 0;      // 0 = no cap
+const INITIAL_LOG = {{ draft_log|tojson }};
+const salaryById  = {};     // player id -> salary
+const spentByTeam = {};     // team name -> total salary drafted
 
 // ── SocketIO connection ──
 socket.on('connect', () => {
@@ -52,51 +56,26 @@ function draftPlayer() {
 }
 
 // ── Receive pick from server ──
-// ── Receive pick from server ──
 socket.on('pick_made', (entry) => {
     console.log('Pick made:', entry);
-    currentPick = entry.pick + 1;
+
+    // the server tells us the real next pick number (it can skip full teams)
+    currentPick = entry.next_pick || (entry.pick + 1);
+    addSpend(entry);
+    if (entry.bonus) addSpend(entry.bonus);
     hasPicks = true;
     updateToggleBtn();
 
-    // mark player row as drafted
-    const row = document.querySelector(`tr[data-id="${entry.id}"]`);
-    if (row) row.classList.add('drafted');
+    // main pick, plus the two-way twin if there is one
+    if (entry.bonus) ensureFlexSlot(entry.team);   // two-way pick: one extra FLEX slot for this team
+    applyPickToUI(entry);
+    if (entry.bonus) applyPickToUI(entry.bonus);
 
     // clear selected state
     selectedPlayerId = null;
     document.getElementById('draftBtn').style.display = 'none';
     document.getElementById('selectedName').textContent = 'Click a player to select';
     document.getElementById('selectedStats').textContent = '';
-
-    // add to draft log
-    const logDiv = document.getElementById('draftLog');
-    if (logDiv) {
-        const noPicksMsg = logDiv.querySelector('.log-empty');
-        if (noPicksMsg) noPicksMsg.remove();
-        const el = document.createElement('div');
-        el.className = 'log-entry';
-        el.textContent = `${entry.pick}. ${entry.team} — ${entry.pos} ${entry.player}`;
-        logDiv.appendChild(el);
-        scrollLogToBottom();
-    }
-
-    // update roster slot for the team that just picked
-    const teamRoster = document.getElementById(`roster-${entry.team}`);
-    if (teamRoster) {
-        const slotLabel = mapPosToSlot(entry.pos);
-        let slot = teamRoster.querySelector(`.t-pick[data-slot="${slotLabel}"]:not(.filled)`);
-        if (!slot && slotLabel !== 'S' && slotLabel !== 'R') {
-            slot = teamRoster.querySelector(`.t-pick[data-slot="UT"]:not(.filled)`);
-        }
-        if (!slot) {
-            slot = teamRoster.querySelector(`.t-pick:not(.filled)`);
-        }
-        if (slot) {
-            slot.textContent = `${entry.pos}: ${entry.player}`;
-            slot.classList.add('filled');
-        }
-    }
 
     // switch roster dropdown to next picking team
     const select = document.getElementById('rosterSelect');
@@ -109,16 +88,18 @@ socket.on('pick_made', (entry) => {
     const clockEl = document.getElementById('clockTeam');
     if (clockEl) clockEl.textContent = entry.next_team;
 
-    // set active team logo
-    setActiveLogo(entry.next_team);
+    // redraw the logo queue
+    setActiveLogo();
 
     // announce last pick
     const announcement = document.getElementById('tickerAnnouncement');
     if (announcement) {
-        announcement.textContent = `${entry.team} select ${entry.pos} — ${entry.player}`;
+        announcement.textContent = entry.bonus
+            ? `${entry.team} select ${entry.pos} — ${entry.player} (plus ${entry.bonus.pos} ${entry.bonus.player})`
+            : `${entry.team} select ${entry.pos} — ${entry.player}`;
     }
 
-    // start timer based on next team type
+    // reset the clock for the next team (it only ticks if the draft is running)
     const isHuman = entry.next_team_type === 'human';
     startTimer(isHuman ? 120 : 15);
 });
@@ -132,7 +113,9 @@ socket.on('pick_error', (data) => {
 
 socket.on('full_sync', (data) => {
     console.log('Full sync received:', data);
-    currentPick = data.log.length + 1;
+    rebuildSpend(data.log);
+
+    currentPick  = data.current_pick;
     draftRunning = !!data.running;
     hasPicks     = data.log.length > 0;
     updateToggleBtn();
@@ -149,7 +132,7 @@ socket.on('full_sync', (data) => {
             data.log.forEach(entry => {
                 const el = document.createElement('div');
                 el.className = 'log-entry';
-                el.textContent = `${entry.pick}. ${entry.team} — ${entry.pos} ${entry.player}`;
+                el.textContent = logLine(entry);
                 logDiv.appendChild(el);
             });
         }
@@ -163,7 +146,7 @@ socket.on('full_sync', (data) => {
 
     const clockEl = document.getElementById('clockTeam');
     if (clockEl) clockEl.textContent = data.current_team;
-    setActiveLogo(data.current_team);
+    setActiveLogo();
 
     const select = document.getElementById('rosterSelect');
     if (select) {
@@ -196,6 +179,9 @@ socket.on('draft_complete', showDraftComplete);
 document.addEventListener('DOMContentLoaded', () => {
     renderLogoStrip();
     scrollLogToBottom();
+    buildSalaryMap();
+    rebuildSpend(INITIAL_LOG);
+    updateSalaryLine();
     // show first team roster on load
     const first = document.querySelector('.roster-team');
     if (first) first.style.display = 'block';
@@ -280,6 +266,7 @@ function filterPos(btn, pos) {
 function showRoster(teamName) {
     document.querySelectorAll('.roster-team').forEach(el => el.style.display = 'none');
     document.getElementById(`roster-${teamName}`).style.display = 'block';
+    updateSalaryLine(teamName);
 }
 
 // -- Highlighting Current Drafting Team --
@@ -403,6 +390,48 @@ function buildLogoEl(team) {
     return wrap;
 }
 
+function logLine(e) {
+    return e.is_bonus
+        ? `↳ ${e.team} — ${e.pos} ${e.player} (two-way)`
+        : `${e.pick}. ${e.team} — ${e.pos} ${e.player}`;
+}
+
+function applyPickToUI(e) {
+    const row = document.querySelector(`tr[data-id="${e.id}"]`);
+    if (row) row.classList.add('drafted');
+
+    const logDiv = document.getElementById('draftLog');
+    if (logDiv) {
+        const noPicksMsg = logDiv.querySelector('.log-empty');
+        if (noPicksMsg) noPicksMsg.remove();
+        const el = document.createElement('div');
+        el.className = 'log-entry';
+        el.textContent = logLine(e);
+        logDiv.appendChild(el);
+        scrollLogToBottom();
+    }
+
+    const teamRoster = document.getElementById(`roster-${e.team}`);
+    if (teamRoster) {
+        const slotLabel = mapPosToSlot(e.pos);
+        // natural slot, then UT (hitters only), then FLEX, then anything open
+        let slot = teamRoster.querySelector(`.t-pick[data-slot="${slotLabel}"]:not(.filled)`);
+        if (!slot && slotLabel !== 'S' && slotLabel !== 'R') {
+            slot = teamRoster.querySelector(`.t-pick[data-slot="UT"]:not(.filled)`);
+        }
+        if (!slot) {
+            slot = teamRoster.querySelector(`.t-pick[data-slot="FLEX"]:not(.filled)`);
+        }
+        if (!slot) {
+            slot = teamRoster.querySelector(`.t-pick:not(.filled)`);
+        }
+        if (slot) {
+            slot.textContent = `${e.pos}: ${e.player}`;
+            slot.classList.add('filled');
+        }
+    }
+}
+
 function renderLogoStrip() {
     const strip = document.getElementById('logoStrip');
     if (!strip) return;
@@ -511,6 +540,55 @@ function renderLogoStrip() {
         }
     });
 }
+
+// a two-way pick gives that team one extra FLEX slot in the roster panel
+function ensureFlexSlot(teamName) {
+    const teamRoster = document.getElementById(`roster-${teamName}`);
+    if (!teamRoster) return;
+    const slot = document.createElement('div');
+    slot.className = 't-pick';
+    slot.dataset.slot = 'FLEX';
+    slot.textContent = 'FLEX: —';
+    teamRoster.appendChild(slot);
+}
+
+function parseSalaryText(v) {
+    return parseFloat(String(v || '').replace(/[$,\s]/g, '')) || 0;
+}
+
+function formatMoney(n) {
+    return (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
+}
+
+function buildSalaryMap() {
+    document.querySelectorAll('#playerBody tr').forEach(row => {
+        salaryById[row.dataset.id] = parseSalaryText(row.dataset.sal);
+    });
+}
+
+function addSpend(e) {
+    spentByTeam[e.team] = (spentByTeam[e.team] || 0) + (salaryById[String(e.id)] || 0);
+}
+
+function rebuildSpend(log) {
+    Object.keys(spentByTeam).forEach(k => delete spentByTeam[k]);
+    log.forEach(addSpend);
+}
+
+function updateSalaryLine(teamName) {
+    const el = document.getElementById('salaryLeft');
+    if (!el) return;
+    if (!SALARY_CAP) {
+        el.style.display = 'none';
+        return;
+    }
+    const select = document.getElementById('rosterSelect');
+    const team = teamName || (select ? select.value : '');
+    const left = SALARY_CAP - (spentByTeam[team] || 0);
+    el.textContent = `Salary left: ${formatMoney(left)}`;
+    el.classList.toggle('over', left < 0);
+    el.style.display = 'block';
+}
 </script>
 {% endblock %}
 
@@ -542,10 +620,10 @@ function renderLogoStrip() {
     <h6>Draft Log</h6>
     <div id="draftLog">
         <!-- ***COMMENT*** Add '| reverse' (without quotes) after draft_log if you want reverse order -->
-        {% for entry in draft_log%}
-        <div class="log-entry">{{ entry.pick }}. {{ entry.team }} — {{ entry.pos }} {{ entry.player }}</div>
-        {% else %}
-        <div class="log-empty">No picks yet</div>
+        {% for entry in draft_log %}
+            <div class="log-entry">{% if entry.is_bonus %}↳ {{ entry.team }} — {{ entry.pos }} {{ entry.player }} (two-way){% else %}{{ entry.pick }}. {{ entry.team }} — {{ entry.pos }} {{ entry.player }}{% endif %}</div>
+            {% else %}
+            <div class="log-empty">No picks yet</div>
         {% endfor %}
     </div>
 </div>
@@ -619,7 +697,7 @@ function renderLogoStrip() {
           <tbody id="playerBody">
               {% for p in players %}
               {% if p.kind == "hitter" %}
-                <tr data-pos="{{ p.short_pos }}" data-kind="hitter" data-id="{{ p.id }}">
+                <tr data-pos="{{ p.short_pos }}" data-kind="hitter" data-id="{{ p.id }}" data-sal="{{ p.s_sal }}">
                     <td class="pos-badge">{{ p.short_pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
                     <td class="team-cell">
@@ -646,7 +724,7 @@ function renderLogoStrip() {
 
                 </tr>
               {% else %}
-                <tr data-pos="{{ p.short_pos }}" data-kind="pitcher" data-id="{{ p.id }}" style="display:none">
+                <tr data-pos="{{ p.short_pos }}" data-kind="pitcher" data-id="{{ p.id }}"  data-sal="{{ p.s_sal }}" style="display:none">
                     <td class="pos-badge">{{ p.short_pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
                     <td class="team-cell">
@@ -699,13 +777,13 @@ function renderLogoStrip() {
     </option>
     {% endfor %}
 </select>
+    <div class="salary-left" id="salaryLeft" style="display:none"></div>
 
     {% for team in all_teams %}
 <div class="roster-team" id="roster-{{ team.name }}" style="display:none">
     <div class="t-name">{{ team.name }}</div>
     {% set assigned = roster_assignments[team.team_id] %}
-    {% for slot in roster_slots %}
-    {% set pick = assigned[loop.index0] %}
+    {% for slot in team_slots[team.team_id] %}    {% set pick = assigned[loop.index0] %}
     {% if pick %}
     <div class="t-pick filled" data-slot="{{ slot }}" id="slot-{{ team.name }}-{{ loop.index0 }}">
         {{ pick.pos }}: {{ pick.player }}

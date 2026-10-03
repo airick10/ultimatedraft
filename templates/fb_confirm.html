@@ -126,7 +126,7 @@ document.addEventListener('DOMContentLoaded', validateSelections);
     <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/football/{{ name }}_fb.png" height="100">
   {% endfor %}
   <h2 class='text-light'>Pool: {{ pool }}</h2>
-  <h2 class='text-light'>Cap: {{ cap }}</h2>
+  <h2 class='text-light'>Cap: {{ '${:,.0f}'.format(cap|float) if cap else 'None' }}</h2>
   <p>
   <hr>
 
