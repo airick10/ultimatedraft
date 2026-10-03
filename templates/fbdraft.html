@@ -24,6 +24,12 @@ let timeLeft  = 0;
 let draftRunning  = false;
 let draftComplete = false;
 let hasPicks      = {{ 'true' if draft_log else 'false' }};
+const DRAFT_TEAMS = {{ all_teams|tojson }};          // teams in draft order
+const ROSTER_SIZE = {{ roster_slots|length }};
+const TOTAL_PICKS = DRAFT_TEAMS.length * ROSTER_SIZE;
+const STRIP_SIZE  = 8;
+let currentPick   = {{ draft_log|length + 1 }};      // the pick number now on the clock
+const logoEls     = new Map();                        // key ("p12" for a pick, "d3" for a round divider) -> DOM element
 
 // ── SocketIO connection ──
 socket.on('connect', () => {
@@ -48,7 +54,7 @@ function draftPlayer() {
 // ── Receive pick from server ──
 socket.on('pick_made', (entry) => {
     console.log('Pick made:', entry);
-
+    currentPick = entry.pick + 1;
     hasPicks = true;
     updateToggleBtn();
 
@@ -124,7 +130,7 @@ socket.on('pick_error', (data) => {
 
 socket.on('full_sync', (data) => {
     console.log('Full sync received:', data);
-
+    currentPick = data.log.length + 1;
     // NEW: restore button state (matters on page refresh)
     draftRunning = !!data.running;
     hasPicks     = data.log.length > 0;
@@ -193,6 +199,7 @@ socket.on('draft_complete', showDraftComplete);
 
 // ── DOM ready ──
 document.addEventListener('DOMContentLoaded', () => {
+    renderLogoStrip();
     scrollLogToBottom();
     // show first team roster on load
     const first = document.querySelector('.roster-team');
@@ -288,12 +295,8 @@ function showRoster(teamName) {
 }
 
 // -- Highlighting Current Drafting Team --
-function setActiveLogo(teamName) {
-    document.querySelectorAll('.logo-wrap').forEach(el => {
-        el.classList.remove('active');
-    });
-    const active = document.querySelector(`.logo-wrap[data-team="${teamName}"]`);
-    if (active) active.classList.add('active');
+function setActiveLogo() {
+    renderLogoStrip();
 }
 
 function startTimer(seconds) {
@@ -385,6 +388,142 @@ function scrollLogToBottom() {
     const pane = document.querySelector('.pane-left');
     if (pane) pane.scrollTop = pane.scrollHeight;
 }
+
+// snake order: odd rounds run forward, even rounds run backward
+function teamForPick(pick) {
+    const n = DRAFT_TEAMS.length;
+    const round = Math.floor((pick - 1) / n);
+    const i = (pick - 1) % n;
+    return DRAFT_TEAMS[round % 2 === 0 ? i : n - 1 - i];
+}
+
+function buildLogoEl(team) {
+    const wrap = document.createElement('div');
+    wrap.className = 'logo-wrap ' + (team.is_human ? 'human' : 'ai');
+    wrap.dataset.team = team.name;
+
+    const img = document.createElement('img');
+    img.src = `https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/football/${encodeURIComponent(team.name)}_fb.png`;
+    img.alt = team.name;
+    img.onerror = () => { img.style.opacity = '0.2'; };
+
+    const label = document.createElement('div');
+    label.className = 'team-label';
+    label.textContent = team.name;
+
+    wrap.appendChild(img);
+    wrap.appendChild(label);
+    return wrap;
+}
+
+function renderLogoStrip() {
+    const strip = document.getElementById('logoStrip');
+    if (!strip) return;
+
+    const n        = DRAFT_TEAMS.length;
+    const DURATION = 500;                          // ms: raise for slower, lower for snappier
+    const EASE     = 'cubic-bezier(.22, .8, .3, 1)';
+    const stripBox = strip.getBoundingClientRect();
+
+    // FIRST: record where everything is now, and cancel any animation still running
+    const first = new Map();
+    logoEls.forEach((el, key) => {
+        first.set(key, el.getBoundingClientRect());
+        el.getAnimations().forEach(a => a.cancel());
+    });
+    const isFirstRender = logoEls.size === 0;
+
+    // Work out what should be showing: [key, element] in order
+    const desired = [];
+    let prevRound = null;
+    for (let k = 0; k < STRIP_SIZE; k++) {
+        const pick = currentPick + k;
+        if (pick > TOTAL_PICKS) break;
+
+        const round = Math.floor((pick - 1) / n);
+        if (prevRound !== null && round !== prevRound) {
+            const dkey = `d${round}`;
+            let div = logoEls.get(dkey);
+            if (!div) {
+                div = document.createElement('div');
+                div.className = 'round-divider';
+                div.title = `Round ${round + 1}`;
+            }
+            desired.push([dkey, div]);
+        }
+        prevRound = round;
+
+        const key = `p${pick}`;
+        let el = logoEls.get(key);
+        if (!el) el = buildLogoEl(teamForPick(pick));
+        el.classList.toggle('active', k === 0);
+        desired.push([key, el]);
+    }
+    const desiredKeys = new Set(desired.map(d => d[0]));
+
+    // Elements that are no longer showing: slide them out as "ghosts", then remove
+    logoEls.forEach((el, key) => {
+        if (desiredKeys.has(key)) return;
+        const box = first.get(key);
+        if (!isFirstRender && box) {
+            el.style.position      = 'absolute';
+            el.style.left          = (box.left - stripBox.left) + 'px';
+            el.style.top           = (box.top  - stripBox.top)  + 'px';
+            el.style.width         = box.width  + 'px';
+            el.style.height        = box.height + 'px';
+            el.style.pointerEvents = 'none';
+            const ghost = el;
+            ghost.animate(
+                [{ transform: 'translateX(0)', opacity: 1 },
+                 { transform: `translateX(-${box.width + 8}px)`, opacity: 0 }],
+                { duration: DURATION, easing: EASE, fill: 'forwards' }
+            ).onfinish = () => ghost.remove();
+        } else {
+            el.remove();
+        }
+        logoEls.delete(key);
+    });
+
+    // Put the wanted elements in order (appendChild moves existing nodes)
+    desired.forEach(([key, el]) => {
+        strip.appendChild(el);
+        logoEls.set(key, el);
+    });
+
+    // "Draft complete" placeholder when nothing is left to show
+    let empty = strip.querySelector('.strip-empty');
+    if (!desired.length) {
+        if (!empty) {
+            empty = document.createElement('div');
+            empty.className = 'team-label strip-empty';
+            empty.style.padding = '14px';
+            empty.textContent = 'Draft complete';
+            strip.appendChild(empty);
+        }
+    } else if (empty) {
+        empty.remove();
+    }
+
+    // LAST + INVERT + PLAY: slide survivors from old spot to new, fade new ones in
+    if (isFirstRender) return;
+    desired.forEach(([key, el]) => {
+        const before = first.get(key);
+        if (before) {
+            const dx = before.left - el.getBoundingClientRect().left;
+            if (Math.abs(dx) > 1) {
+                el.animate(
+                    [{ transform: `translateX(${dx}px)` }, { transform: 'translateX(0)' }],
+                    { duration: DURATION, easing: EASE }
+                );
+            }
+        } else {
+            el.animate(
+                [{ opacity: 0, transform: 'translateX(40px)' }, { opacity: 1, transform: 'translateX(0)' }],
+                { duration: DURATION, easing: EASE }
+            );
+        }
+    });
+}
 </script>
 {% endblock %}
 
@@ -398,18 +537,7 @@ function scrollLogToBottom() {
 
 <!-- ── Logo Strip(s) ── -->
 
-{% for row in logo_rows %}
-<div class="logo-strip">
-  {% for team in row %}
-  <div class="logo-wrap {{ 'human' if team.is_human else 'ai' }}" data-team="{{ team.name }}">
-    <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/football/{{ team.name }}_fb.png"
-         alt="{{ team.name }}"
-         onerror="this.style.opacity='0.2'">
-    <div class="team-label">{{ team.name }}</div>
-  </div>
-  {% endfor %}
-</div>
-{% endfor %}
+<div class="logo-strip" id="logoStrip"></div>
 
 <!-- Draft Ticker -->
 <div class="draft-ticker">
