@@ -43,10 +43,12 @@ from .services import (
     assign_picks_to_slots_bb,
     assign_picks_to_slots_bk,
     assign_picks_to_slots_fb,
-    delete_saved_draft
+    delete_saved_draft,
+    TWO_WAY_BB
 )
 from datetime import datetime
 import random
+from collections import Counter
 import json
 from pathlib import Path
 from flask_socketio import emit
@@ -118,10 +120,14 @@ def bb_load():
     for entry in log:
         rosters.setdefault(entry['team_id'], []).append(entry)
 
-    roster_assignments = {
-        t["team_id"]: assign_picks_to_slots_bb(roster_slots, rosters.get(t["team_id"], []))
-        for t in meta["teams"]
-    }
+    team_slots = {}
+    roster_assignments = {}
+    for t in meta["teams"]:
+        picks = rosters.get(t["team_id"], [])
+        n_bonus = sum(1 for e in picks if e.get('is_bonus'))
+        slots = roster_slots + ["FLEX"] * n_bonus
+        team_slots[t["team_id"]] = slots
+        roster_assignments[t["team_id"]] = assign_picks_to_slots_bb(slots, picks)
 
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
     current_team      = current_team_obj['team_name'] if current_team_obj else all_teams[0]['name']
@@ -133,6 +139,7 @@ def bb_load():
         logo_rows=logo_rows,
         roster_slots=roster_slots,
         roster_assignments=roster_assignments,
+        team_slots=team_slots,
         num_teams=meta.get("num_teams", 0),
         human_teams=human_teams,
         ai_set=ai_set,
@@ -144,6 +151,7 @@ def bb_load():
         draft_file=str(draft_data.get("player_path", "")),
         sport='bb',
         current_team=current_team,
+        current_pick=meta['current_pick'],
         current_team_type=current_team_type,
     )
 
@@ -152,7 +160,7 @@ def bb_confirm():
     num_teams = int(request.form.get("num_teams"))
     human_teams = request.form.getlist("human_teams")
     pool = request.form.get("pool")
-    cap = request.form.get("cap")
+    cap = read_cap(request.form)
     draftname = request.form.get("draftname")
     selected_player_ids = request.form.getlist("selected_player_ids")
     ai_set = request.form.getlist("ai_set")
@@ -261,10 +269,14 @@ def bb_draft():
     for entry in draft_log:
         rosters.setdefault(entry['team_id'], []).append(entry)
 
-    roster_assignments = {
-        t["team_id"]: assign_picks_to_slots_bb(roster_slots, rosters.get(t["team_id"], []))
-        for t in meta["teams"]
-    }
+    team_slots = {}
+    roster_assignments = {}
+    for t in meta["teams"]:
+        picks = rosters.get(t["team_id"], [])
+        n_bonus = sum(1 for e in picks if e.get('is_bonus'))
+        slots = roster_slots + ["FLEX"] * n_bonus
+        team_slots[t["team_id"]] = slots
+        roster_assignments[t["team_id"]] = assign_picks_to_slots_bb(slots, picks)
 
     # current picking team
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
@@ -277,6 +289,7 @@ def bb_draft():
         logo_rows=logo_rows,
         roster_slots=roster_slots,
         roster_assignments=roster_assignments,
+        team_slots=team_slots,
         pool=pool,
         cap=cap,
         draftname=draftname,
@@ -284,6 +297,7 @@ def bb_draft():
         draft_file=output_path,
         draft_log=draft_log,
         current_team=current_team,
+        current_pick=meta['current_pick'],
         current_team_type=current_team_type,
         sport="bb"
     )
@@ -393,7 +407,7 @@ def bk_confirm():
     num_teams = int(request.form.get("num_teams"))
     human_teams = request.form.getlist("human_teams")
     pool = request.form.get("pool")
-    cap = request.form.get("cap")
+    cap = read_cap(request.form)
     draftname = request.form.get("draftname")
     selected_player_ids = request.form.getlist("selected_player_ids")
     ai_set = request.form.getlist("ai_set")
@@ -559,7 +573,7 @@ def fb_confirm():
     num_teams = int(request.form.get("num_teams"))
     human_teams = request.form.getlist("human_teams")
     pool = request.form.get("pool")
-    cap = request.form.get("cap")
+    cap = read_cap(request.form)
     draftname = request.form.get("draftname")
     selected_player_ids = request.form.getlist("selected_player_ids")
     ai_set = request.form.getlist("ai_set")
@@ -790,7 +804,7 @@ def fb_delete():
 def make_ai_pick_bb(draftname):
     """
     Makes one AI-selected pick for whichever team is currently on the clock
-    -- AI team or a human whose timer expired. Returns the log entry dict,
+    -- AI team or a human whose timer expired. Returns the pick_made payload,
     or None if the draft is already full / something's missing.
     """
     roster_slots = ["C", "C", "1B", "2B", "SS", "3B", "LF", "CF", "RF",
@@ -818,13 +832,12 @@ def make_ai_pick_bb(draftname):
         log = json.load(f)
 
     team_picks         = [e for e in log if e['team_id'] == team_id]
+    team_slots         = roster_slots + ["FLEX"] * sum(1 for e in team_picks if e.get('is_bonus'))
     round_num          = (meta['current_pick'] - 1) // meta['num_teams'] + 1
     cap                = meta.get('cap')
-    salary_cap_enabled = bool(cap)
+    salary_cap_enabled = parse_salary(cap) > 0
 
-    # team.get('AIFocus', 1) inside ai_select_bb already defaults to
-    # "Best Overall" for human teams, since they never have an AIFocus set
-    player_id = ai_select_bb(team, roster_slots, team_picks, players, round_num, cap, salary_cap_enabled)
+    player_id = ai_select_bb(team, team_slots, team_picks, players, round_num, cap, salary_cap_enabled)
 
     if player_id is None:
         undrafted = [p for p in players if p.get('team_id', 0) == 0]
@@ -839,9 +852,14 @@ def make_ai_pick_bb(draftname):
 
     pick_num = meta['current_pick']
     player['team_id'] = team_id
+
+    # NEW: two-way players bring their twin along
+    bonus = maybe_add_twin_bb(player, players, team, pick_num, log_path)
+
     with open(draft_path, "w", encoding="utf-8") as f:
         json.dump(players, f, indent=2)
 
+    # advance to the next pick
     meta['current_pick'] += 1
     meta['current_team_id'] = get_next_team_id(meta)
     next_team = get_team_by_id(meta, meta['current_team_id'])
@@ -855,12 +873,14 @@ def make_ai_pick_bb(draftname):
         "id":              str(player_id),
         "next_team":       next_team['team_name'] if next_team else '',
         "next_team_type":  next_team['type'] if next_team else '',
-        "auto_picked":     team['type'] == 'human',  # flag for future UI use -- not read yet
+        "auto_picked":     team['type'] == 'human',
     }
     append_to_log(log_path, entry)
+    if bonus:
+        append_to_log(log_path, bonus)
     save_baseball_meta(draftname, meta)
 
-    return entry
+    return {**entry, 'next_pick': meta['current_pick'], 'bonus': bonus}
 
 
 def run_ai_picks_bb(draftname):
@@ -917,7 +937,7 @@ def make_ai_pick_bk(draftname):
     team_picks         = [e for e in log if e['team_id'] == team_id]
     round_num          = (meta['current_pick'] - 1) // meta['num_teams'] + 1
     cap                = meta.get('cap')
-    salary_cap_enabled = bool(cap)
+    salary_cap_enabled = parse_salary(cap) > 0
 
     player_id = ai_select_bk(team, roster_slots, team_picks, players, round_num, cap, salary_cap_enabled)
 
@@ -1013,7 +1033,7 @@ def make_ai_pick_fb(draftname):
     team_picks         = [e for e in log if e['team_id'] == team_id]
     round_num          = (meta['current_pick'] - 1) // meta['num_teams'] + 1
     cap                = meta.get('cap')
-    salary_cap_enabled = bool(cap)
+    salary_cap_enabled = parse_salary(cap) > 0
 
     player_id = ai_select_fb(team, roster_slots, team_picks, players, round_num, cap, salary_cap_enabled)
 
@@ -1091,6 +1111,37 @@ AI_LOOPS       = set()   # {(draftname, sport), ...}  prevents duplicate AI loop
 def is_draft_complete(meta, sport):
     return meta['current_pick'] > meta['num_teams'] * ROSTER_SIZE[sport]
 
+
+def maybe_add_twin_bb(player, players, team, pick_num, log_path):
+    """If the drafted player has a two-way twin, assign the twin to the same team.
+    Returns the bonus log entry (not yet written to the log), or None."""
+    twin_id = TWO_WAY_BB.get(str(player.get('id')))
+    if not twin_id:
+        return None
+
+    twin = next((p for p in players if str(p.get('id')) == twin_id), None)
+    if not twin or twin.get('team_id', 0) != 0:
+        return None            # twin isn't in this pool, or is already taken
+
+    twin['team_id'] = team['team_id']
+    return {
+        "pick":     pick_num,  # same pick number as the main pick
+        "team_id":  team['team_id'],
+        "team":     team['team_name'],
+        "player":   f"{twin.get('FirstName')} {twin.get('LastName')}",
+        "pos":      twin.get('short_pos') or twin.get('Pos', ''),
+        "id":       str(twin_id),
+        "is_bonus": True,
+    }
+
+def read_cap(form):
+    """Returns the salary cap as a clean number string, or '' for no cap."""
+    raw = (form.get("cap") or "").strip()
+    if raw.lower() == "yes":
+        raw = (form.get("cap_amount") or "").strip()
+    raw = raw.replace("$", "").replace(",", "")
+    return raw if parse_salary(raw) > 0 else ""
+
 # ------ SOCKET IO CALLS -------
 
 @socketio.on('make_pick')
@@ -1122,7 +1173,7 @@ def handle_make_pick(data):
         emit('pick_error', {'message': 'The draft is over'})
         return
 
-    # NEW: draft is paused / not started
+    # draft is paused / not started
     if (draftname, sport) not in RUNNING_DRAFTS:
         emit('pick_error', {'message': 'The draft is paused. Hit Start/Resume first.'})
         return
@@ -1152,10 +1203,16 @@ def handle_make_pick(data):
 
     # assign player to team
     player['team_id'] = team_id
+
+    # NEW: baseball two-way players bring their twin along
+    bonus = None
+    if sport == 'bb':
+        bonus = maybe_add_twin_bb(player, players, team, pick_num, log_path)
+
     with open(draft_path, "w", encoding="utf-8") as f:
         json.dump(players, f, indent=2)
 
-    # advance pick counter
+    # advance the pick counter
     meta['current_pick'] += 1
     meta['current_team_id'] = get_next_team_id(meta)
     next_team = get_team_by_id(meta, meta['current_team_id'])
@@ -1174,6 +1231,8 @@ def handle_make_pick(data):
         "next_team_type": next_team['type']
     }
     append_to_log(log_path, entry)
+    if bonus:                                  # NEW
+        append_to_log(log_path, bonus)
 
     # save meta
     if sport == 'bb':
@@ -1183,7 +1242,9 @@ def handle_make_pick(data):
     elif sport == 'fb':
         save_football_meta(draftname, meta)
 
-    socketio.emit('pick_made', entry)
+    # NEW: the live event also carries the real next pick number and the bonus entry
+    payload = {**entry, 'next_pick': meta['current_pick'], 'bonus': bonus}
+    socketio.emit('pick_made', payload)
 
     # that was the last pick: announce it and don't start any more AI picks
     if is_draft_complete(meta, sport):
@@ -1291,6 +1352,7 @@ def handle_request_sync(data):
         'current_team_type': current_team['type'] if current_team else 'human',
         'running': (draftname, sport) in RUNNING_DRAFTS,
         'complete': is_draft_complete(meta, sport),
+        'current_pick': meta['current_pick'],
     })
 
 META_LOADERS = {'bb': load_baseball_meta, 'bk': load_basketball_meta, 'fb': load_football_meta}

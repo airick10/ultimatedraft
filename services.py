@@ -33,6 +33,21 @@ FOOTBALL_POS_MAP = {
 }
 
 
+# Two-way players: (hitter JSON ID, pitcher JSON ID). Drafting either side drafts both.
+TWO_WAY_PAIRS_BB = [
+    (390, 277),    # Shohei Ohtani
+    (462, 340),    # Babe Ruth
+    (599, 447),    # Rick Ankiel
+    (454, 326),    # Bullet Joe Rogan
+    (156, 86),     # Martin Dihigo
+    (371, 249)     # José Méndez
+]
+
+TWO_WAY_BB = {}
+for _h, _p in TWO_WAY_PAIRS_BB:
+    TWO_WAY_BB[f"h_{_h}"] = f"p_{_p}"
+    TWO_WAY_BB[f"p_{_p}"] = f"h_{_h}"
+
 def _read_json(src: str):
     if src.startswith("http://") or src.startswith("https://"):
         resp = requests.get(src, timeout=10)
@@ -1047,9 +1062,11 @@ def assign_picks_to_slots_bb(roster_slots, team_picks):
     """
     Match each drafted player (in draft order) to a roster slot by position.
     roster_slots: template list, e.g. ["C","C","1B",...,"UT","UT",...,"S","S",...,"R","R",...]
+                  plus one "FLEX" per two-way bonus player on this team.
     team_picks: this team's log entries, in the order they were drafted.
-    Returns a list the same length as roster_slots — each entry is either
-    the matching log entry dict, or None if that slot is still open.
+    Priority: natural slot, then UT (hitters only), then FLEX (anyone), then any open slot.
+    Returns a list the same length as roster_slots, each entry either the matching
+    log entry dict or None if that slot is still open.
     """
     assigned = [None] * len(roster_slots)
     open_by_label = {}
@@ -1064,6 +1081,8 @@ def assign_picks_to_slots_bb(roster_slots, team_picks):
             target = open_by_label[slot_label].pop(0)
         elif slot_label not in ('S', 'R') and open_by_label.get('UT'):
             target = open_by_label['UT'].pop(0)
+        elif open_by_label.get('FLEX'):
+            target = open_by_label['FLEX'].pop(0)
         else:
             for label, indices in open_by_label.items():
                 if indices:
