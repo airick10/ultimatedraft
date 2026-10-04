@@ -693,7 +693,7 @@ def load_football(pool, num_teams):
             player = {"kind": "receiver", "short_pos": normalize_football_pos(raw, default='WR'), "id": uid, **r}
             pos = player["short_pos"]
             if pos == "WR":  wr.append(player)
-            else:            te.append(player)
+            elif pos == "TE":  te.append(player)
 
         for _id, d in defoff.items():
             uid = f"do_{_id}"
@@ -707,16 +707,18 @@ def load_football(pool, num_teams):
             player = {"kind": "special", "name": f"{k.get('Year','')} {k.get('Team','')} {k.get('Positions','')}", "short_pos": "KP", "id": uid, **k}
             kp.append(player)
 
-        num_qb = num_teams * 1
-        num_hb = num_teams * 2
-        num_te = num_teams * 2
-        num_wr = num_teams * 2
-        num_do = num_teams * 2
-        num_kp = num_teams * 2
+        num_qb = num_teams * 3     # 2 slots + 1 spare per team
+        num_hb = num_teams * 3     # 2 slots + 1 spare
+        num_fb = num_teams * 2     # 1 slot + 1 spare
+        num_te = num_teams * 3     # 2 slots + 1 spare
+        num_wr = num_teams * 5     # 4 slots + 1 spare
+        num_do = num_teams * 2     # 1 slot + 1 spare
+        num_kp = num_teams * 2     # 1 slot + 1 spare
 
         people = (
             random.sample(qb, min(num_qb, len(qb))) +
             random.sample(hb, min(num_hb, len(hb))) +
+            random.sample(fb, min(num_fb, len(fb))) +
             random.sample(te, min(num_te, len(te))) +
             random.sample(wr, min(num_wr, len(wr))) +
             random.sample(do, min(num_do, len(do))) +
@@ -960,7 +962,7 @@ def compute_short_pos(kind: str, person: dict) -> str:
         if first == "R":
             return "RP"
         if first == "C":
-            return "CL"
+            return "RP"
         return "SP"  # safe default
     return ""
 
@@ -1044,7 +1046,7 @@ def append_to_log(log_path, entry):
 
 SHORT_POS_TO_SLOT_BB = {
     'C': 'C', '1B': '1B', '2B': '2B', '3B': '3B', 'SS': 'SS',
-    'LF': 'LF', 'CF': 'CF', 'RF': 'RF', 'SP': 'S', 'RP': 'R',
+    'LF': 'LF', 'CF': 'CF', 'RF': 'RF', 'SP': 'S', 'RP': 'R', 'CL': 'R',
 }
 
 SHORT_POS_TO_SLOT_FB = {

@@ -7,7 +7,11 @@ shape once their position-eligibility rules are worked out.
 
 import random
 
-from .services import assign_picks_to_slots_bb, assign_picks_to_slots_bk, assign_picks_to_slots_fb
+from .services import (
+    assign_picks_to_slots_bb, assign_picks_to_slots_bk, assign_picks_to_slots_fb,
+    SHORT_POS_TO_SLOT_BB, SHORT_POS_TO_SLOT_FB, HB_FB_OVERFLOW,
+)
+from collections import Counter
 
 
 # ============================================================
@@ -128,26 +132,65 @@ def eligible_position_bb(roster_slots, team_picks, ai_focus):
 # instead of the missing DP1/DP2/DP3/Bat/Throw/Role fields.
 # ============================================================
 
+def natural_slot_bb(player):
+    """The roster slot a player naturally fills. Same lookup the roster display uses."""
+    return SHORT_POS_TO_SLOT_BB.get(player.get('short_pos', ''), 'UT')
+
+
+def open_slot_counts_bb(roster_slots, team_picks):
+    """{slot label: number of still-open slots} for this team."""
+    assigned = assign_picks_to_slots_bb(roster_slots, team_picks)
+    return Counter(label for filled, label in zip(assigned, roster_slots) if filled is None)
+
+
+FIELD_POS_BB       = ('C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF')
+UT_BACKUPS_PER_POS = 1    # raise to 2 to allow more backups at the same position
+
+
+def hitter_pos_counts_bb(team_picks):
+    """How many hitters this team already has at each natural position (starters + backups)."""
+    counts = Counter()
+    for e in team_picks:
+        slot = SHORT_POS_TO_SLOT_BB.get(e.get('pos', ''), 'UT')
+        if slot not in ('S', 'R'):
+            counts[slot] += 1
+    return counts
+
+
+def fits_open_slots_bb(player, open_counts, pos_counts=None, base_slots=None):
+    """True if this player would land in an open slot he belongs in:
+    his natural slot, UT (hitters only, with a backup-variety limit), or a FLEX slot."""
+    natural = natural_slot_bb(player)
+    if open_counts.get(natural):
+        return True
+    if player.get('kind') == 'hitter' and open_counts.get('UT'):
+        if pos_counts is None:          # variety check switched off
+            return True
+        starters = base_slots.get(natural, 0) if natural in FIELD_POS_BB else 0
+        if pos_counts.get(natural, 0) < starters + UT_BACKUPS_PER_POS:
+            return True
+    return bool(open_counts.get('FLEX'))
+
 def check_functions_bb(def_check):
-    def dp_in(p, code):
-        return code in parse_fielding(p)
+    def at_slot(label):
+        return lambda p: natural_slot_bb(p) == label
 
     table = {
         0:  lambda p: True,
-        1:  lambda p: pitcher_role(p) == 'S',
-        2:  lambda p: dp_in(p, '2'),
-        3:  lambda p: dp_in(p, '3'),
-        4:  lambda p: dp_in(p, '4'),
-        5:  lambda p: dp_in(p, '5'),
-        6:  lambda p: dp_in(p, '6'),
-        7:  lambda p: dp_in(p, '7'),
-        8:  lambda p: dp_in(p, '8'),
-        9:  lambda p: dp_in(p, '9'),
+        1:  at_slot('S'),
+        2:  at_slot('C'),
+        3:  at_slot('1B'),
+        4:  at_slot('2B'),
+        5:  at_slot('3B'),
+        6:  at_slot('SS'),
+        7:  at_slot('LF'),
+        8:  at_slot('CF'),
+        9:  at_slot('RF'),
         10: lambda p: True,  # UT -- any hitter fits
-        11: lambda p: pitcher_role(p) == 'R',
-        12: lambda p: True,  # old "position-player defense" check (DR1) has no equivalent field -- no filter for now
+        11: at_slot('R'),
+        12: lambda p: True,  # old "position-player defense" check has no equivalent field -- no filter for now
         13: lambda p: bat_throw_code(p.get('Bats')) == 'L' or bat_throw_code(p.get('Throws')) == 'L',
-        14: lambda p: parse_fielding(p)[0] in ('2', '4', '6', '8'),
+        14: lambda p: natural_slot_bb(p) in ('C', '2B', 'SS', 'CF'),   # up the middle
     }
     return table.get(def_check, lambda p: True)
 
@@ -289,17 +332,15 @@ def auto_select_pitcher_bb(position, hitters_pool, pitchers_pool, round_num, foc
 def ai_select_bb(team, roster_slots, team_picks, all_players, round_num, cap, salary_cap_enabled):
     """
     Port of aipicks.py's aiSelect() for one team's single pick.
-    all_players: the full draft's player list (same object routes.py already
-    loads from the draft JSON), drafted and undrafted alike -- used both to
-    find eligible players and to total up what this team has already spent.
     Returns a player id, or None if nothing eligible was found.
     """
     ai_focus = team.get('AIFocus', 1)
     config = AI_FOCUS_TABLE.get(ai_focus, AI_FOCUS_TABLE[1])
     position = eligible_position_bb(roster_slots, team_picks, ai_focus)
 
-    hitters_pool  = [p for p in all_players if p.get('kind') == 'hitter'  and p.get('team_id', 0) == 0]
-    pitchers_pool = [p for p in all_players if p.get('kind') == 'pitcher' and p.get('team_id', 0) == 0]
+    open_counts = open_slot_counts_bb(roster_slots, team_picks)
+    pos_counts  = hitter_pos_counts_bb(team_picks)
+    base_slots  = Counter(roster_slots)
 
     slots_left = max(len(roster_slots) - len(team_picks), 1)
 
@@ -318,10 +359,33 @@ def ai_select_bb(team, roster_slots, team_picks, all_players, round_num, cap, sa
     else:
         avg_salary = float('inf')
 
-    if config['mode'] == 'H':
-        return auto_select_hitter_bb(position, hitters_pool, pitchers_pool, round_num, config['focus'], config['keys'], avg_salary)
-    else:
-        return auto_select_pitcher_bb(position, hitters_pool, pitchers_pool, round_num, config['focus'], config['keys'], avg_salary)
+    def attempt(variety):
+        pc = pos_counts if variety else None
+        hitters_pool = [
+            p for p in all_players
+            if p.get('kind') == 'hitter' and p.get('team_id', 0) == 0
+            and fits_open_slots_bb(p, open_counts, pc, base_slots)
+        ]
+        pitchers_pool = [
+            p for p in all_players
+            if p.get('kind') == 'pitcher' and p.get('team_id', 0) == 0
+            and fits_open_slots_bb(p, open_counts, pc, base_slots)
+        ]
+        if config['mode'] == 'H':
+            pick = auto_select_hitter_bb(position, hitters_pool, pitchers_pool, round_num, config['focus'], config['keys'], avg_salary)
+        else:
+            pick = auto_select_pitcher_bb(position, hitters_pool, pitchers_pool, round_num, config['focus'], config['keys'], avg_salary)
+
+        # rolled side or slot had nobody: take the best-paid player who fits from either pool
+        if pick is None:
+            pool = ai_sort_pool_bb('s_sal', hitters_pool + pitchers_pool)
+            pick = ai_select_snippet_bb(pool, -1, 0, avg_salary)
+        return pick
+
+    pick = attempt(True)
+    if pick is None:
+        pick = attempt(False)    # only break the variety rule if there's no other option
+    return pick
 
 
 # ============================================================
@@ -456,10 +520,6 @@ def ai_select_bk(team, roster_slots, team_picks, all_players, round_num, cap, sa
 # FOOTBALL
 # ============================================================
 
-# ============================================================
-# FOOTBALL
-# ============================================================
-
 SLOT_TO_POOL_FB = {
     'QB': 'passer',
     'HB': 'rusher', 'FB': 'rusher',
@@ -522,8 +582,11 @@ def top_four_grabs_fb(playerpool, avg_salary):
     return ai_select_snippet_fb(playerpool, threshold, avg_salary)
 
 
-def auto_select_fb(pool_name, all_players, stat_key, avg_salary):
-    pool = [p for p in all_players if p.get('kind') == pool_name and p.get('team_id', 0) == 0]
+def auto_select_fb(slot_label, pool_name, all_players, stat_key, avg_salary):
+    pool = [
+        p for p in all_players
+        if p.get('kind') == pool_name and p.get('team_id', 0) == 0 and fits_slot_fb(p, slot_label)
+    ]
     sorted_pool = ai_sort_pool_fb(stat_key, pool)
     return top_four_grabs_fb(sorted_pool, avg_salary)
 
@@ -577,4 +640,28 @@ def ai_select_fb(team, roster_slots, team_picks, all_players, round_num, cap, sa
     else:
         avg_salary = float('inf')
 
-    return auto_select_fb(pool_name, all_players, stat_key, avg_salary)
+    pick = auto_select_fb(slot_label, pool_name, all_players, stat_key, avg_salary)
+
+    # nobody at that exact position was available/affordable: take the best-paid
+    # player who fits ANY open slot. Strict first; HB/FB cross-fill only if nothing else works.
+    if pick is None:
+        open_labels = set(open_position_lottery_fb(roster_slots, team_picks))
+        for strict in (True, False):
+            pool = [
+                p for p in all_players
+                if p.get('team_id', 0) == 0 and any(fits_slot_fb(p, s, strict) for s in open_labels)
+            ]
+            pick = ai_select_snippet_fb(ai_sort_pool_fb('Salary', pool), -1, avg_salary)
+            if pick is not None:
+                break
+
+    return pick
+
+def fits_slot_fb(player, slot_label, strict=True):
+    """True if this player belongs in the given open slot.
+    strict=True: exact position only (a real FB for the FB slot, a real HB for an HB slot).
+    strict=False: HB and FB may fill each other's slots (last-resort fallback)."""
+    natural = SHORT_POS_TO_SLOT_FB.get(player.get('short_pos', ''), '')
+    if natural == slot_label:
+        return True
+    return (not strict) and HB_FB_OVERFLOW.get(slot_label) == natural
