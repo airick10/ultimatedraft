@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, abort, current_app, redirect, url_for
+from flask import Blueprint, render_template, request, abort, current_app, redirect, url_for, send_file
 from .ai import ai_select_bb, ai_select_bk, ai_select_fb, parse_salary
 from .services import (
     load_baseball,
@@ -47,7 +47,9 @@ from .services import (
     TWO_WAY_BB
 )
 from datetime import datetime
+from .exports import build_bb_workbook
 import random
+import io
 from collections import Counter
 import json
 from pathlib import Path
@@ -314,6 +316,24 @@ def bb_delete():
     except ValueError as exc:
         abort(400, str(exc))
     return redirect(url_for("main.start_baseball"))
+
+@main.route("/bb_export/<draftname>")
+def bb_export(draftname):
+    if Path(draftname).name != draftname:
+        abort(400, "Bad draft name.")
+    if not (Path("drafts") / f"{draftname}_bb.json").exists():
+        abort(404, "Draft not found.")
+
+    wb = build_bb_workbook(draftname)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=f"{draftname}_rosters.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 #-------- BASKETBALL -----------------------------------------------------------------
 
@@ -1038,6 +1058,7 @@ def make_ai_pick_fb(draftname):
     player_id = ai_select_fb(team, roster_slots, team_picks, players, round_num, cap, salary_cap_enabled)
 
     if player_id is None:
+        print(f">>> FB fallback (cheapest undrafted) for {team['team_name']} at pick {meta['current_pick']}")
         undrafted = [p for p in players if p.get('team_id', 0) == 0]
         if not undrafted:
             return None
