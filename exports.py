@@ -57,6 +57,7 @@ R_KEYS = {"s_ab", "s_sovrhp", "s_bbvrhp", "s_hitvrhp", "s_obvrhp", "s_tbvrhp",
           "s_obtbvr", "s_hrvrhp", "s_bpvrhp", "s_clvrhp", "s_dpvrhp"}
 
 NO_AVG_KEYS = {"Team", "__name__", "__spacer__", "__blank__"}
+TEXT_KEYS = {"s_field"}
 BOLD_KEYS   = {"s_obtbvl", "s_obtbvr"}
 
 # lineup order, as you listed it
@@ -88,6 +89,8 @@ def cell_value(key, player):
     raw = player.get(key)
     if raw is None:
         return None
+    if key in TEXT_KEYS:
+        return str(raw).strip() or None
     if key == "s_sal":
         return parse_salary(raw) if str(raw).strip() else None
     if isinstance(raw, (int, float)):
@@ -177,6 +180,8 @@ def _write_player_row(ws, row, columns, player, side):
         cell = ws.cell(row=row, column=c, value=value)
         if key == "s_sal":
             cell.number_format = "$#,##0"
+        if key in TEXT_KEYS:
+            cell.number_format = "@"
         if key in BOLD_KEYS:
             cell.font = Font(bold=True)
 
