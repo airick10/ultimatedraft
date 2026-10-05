@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }} - Baseball Draft Results</title>
+<style>
+{% raw %}
+:root{--navy:#14213d;--gold:#c9a84c;--ink:#1f2937;--muted:#6b7280;--line:#e5e7eb;--bg:#f3f4f6;--card:#fff}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+[hidden]{display:none!important}
+
+/* ---- sticky nav ---- */
+.nav{position:sticky;top:0;z-index:50;background:var(--navy);color:#fff;border-bottom:3px solid var(--gold)}
+.nav-inner{max-width:1400px;margin:0 auto;padding:8px 16px;min-height:56px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{color:#fff;text-decoration:none;font-weight:700;font-size:1.05rem;margin-right:auto}
+.brand span{color:var(--gold);font-weight:500;margin-left:8px}
+.nav button,.nav input{font:inherit;border-radius:6px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;padding:6px 12px}
+.nav button{cursor:pointer}
+.nav button:hover{background:rgba(255,255,255,.18)}
+.nav input{width:170px}
+.nav input::placeholder{color:rgba(255,255,255,.6)}
+.seg{display:flex}
+.seg button{border-radius:0;margin-left:-1px}
+.seg button:first-child{border-radius:6px 0 0 6px;margin-left:0}
+.seg button:last-child{border-radius:0 6px 6px 0}
+.seg button.on{background:var(--gold);color:#111;border-color:var(--gold);font-weight:600}
+.menu{position:relative}
+.menu-list{position:absolute;right:0;top:calc(100% + 8px);min-width:230px;max-height:70vh;overflow:auto;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.2);padding:6px}
+.menu-list a{display:block;padding:7px 10px;border-radius:6px;color:inherit;text-decoration:none}
+.menu-list a:hover{background:var(--bg)}
+.menu-list a.active{font-weight:600;box-shadow:inset 3px 0 var(--gold);background:var(--bg)}
+
+/* ---- team cards ---- */
+main{padding:4px 16px 40px}
+.team{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:18px auto;max-width:1400px;scroll-margin-top:96px;overflow:hidden}
+.team-head{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;user-select:none}
+.team-logo{height:44px;width:auto}
+.team-head h2{margin:0;font-size:1.2rem}
+.badge{margin-left:10px;font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--gold);color:#111;padding:2px 8px;border-radius:999px;vertical-align:middle}
+.meta{margin-left:auto;color:var(--muted)}
+.chev{transition:transform .2s;color:var(--muted)}
+.collapsed .chev{transform:rotate(-90deg)}
+.collapsed .team-body{display:none}
+.team-body{padding:4px 16px 18px;border-top:1px solid var(--line)}
+.sec h3{margin:18px 0 2px;font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);border-bottom:1px solid var(--line);padding-bottom:4px}
+.sec h4{margin:12px 0 6px;font-size:.95rem}
+body[data-view="real"] .sec-strat,body[data-view="strat"] .sec-real{display:none}
+
+/* ---- tables ---- */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table.stat{border-collapse:separate;border-spacing:0;width:100%;font-variant-numeric:tabular-nums}
+table.stat th,table.stat td{padding:6px 10px;white-space:nowrap;border-bottom:1px solid var(--line);text-align:right}
+table.stat tbody tr:last-child td{border-bottom:0}
+table.stat th{background:#f9fafb;font-size:.7rem;letter-spacing:.05em;text-transform:uppercase;color:#4b5563;cursor:pointer;user-select:none}
+table.stat th:hover{color:var(--ink)}
+table.stat th.name,table.stat th.text,table.stat th.team,
+table.stat td.name,table.stat td.text,table.stat td.team{text-align:left}
+table.stat td{background:#fff}
+table.stat tbody tr:nth-child(even) td{background:#fafafa}
+table.stat tbody tr:hover td{background:#fef9e7}
+table.stat td.name,table.stat th.name{position:sticky;left:0;z-index:1;box-shadow:1px 0 0 var(--line)}
+table.stat td.name a{color:#0b5cab;font-weight:500;text-decoration:none}
+table.stat td.name a:hover{text-decoration:underline}
+table.stat td.team img{height:24px;width:auto;vertical-align:middle}
+table.stat td.strong{font-weight:700}
+table.stat th[data-dir="asc"]::after{content:" \25B2";font-size:.6rem}
+table.stat th[data-dir="desc"]::after{content:" \25BC";font-size:.6rem}
+tr.none td{text-align:center!important;color:var(--muted)}
+footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
+@media print{.nav{display:none}.team-body{display:block!important}.team{break-inside:avoid-page}}
+{% endraw %}
+</style>
+</head>
+<body data-view="both">
+
+{% macro stat_table(cols, rows) %}
+<div class="tbl-wrap">
+<table class="stat">
+  <thead><tr>
+    {% for c in cols %}<th class="{{ c.kind }}">{{ c.h }}</th>{% endfor %}
+  </tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr data-name="{{ row[0].sort }}">
+    {% for cell in row %}
+      {% if cell.kind == 'name' %}
+        <td class="name" data-sort="{{ cell.sort }}">{% if cell.url %}<a href="{{ cell.url }}" target="_blank" rel="noopener noreferrer">{{ cell.text }}</a>{% else %}{{ cell.text }}{% endif %}</td>
+      {% elif cell.kind == 'team' %}
+        <td class="team" data-sort="{{ cell.sort }}">{% if cell.logo %}<img src="{{ cell.logo }}" alt="{{ cell.text }}" title="{{ cell.text }}" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false;"><span hidden>{{ cell.text }}</span>{% else %}{{ cell.text }}{% endif %}</td>
+      {% else %}
+        <td class="{{ cell.kind }}{{ ' strong' if cell.strong }}" data-sort="{{ cell.sort }}">{{ cell.text }}</td>
+      {% endif %}
+    {% endfor %}
+    </tr>
+  {% else %}
+    <tr class="none"><td colspan="{{ cols|length }}">None</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endmacro %}
+
+<header class="nav" id="top">
+  <div class="nav-inner">
+    <a class="brand" href="#top">{{ title }}<span>Baseball Draft Results</span></a>
+    <div class="menu">
+      <button id="teamsBtn" type="button" aria-expanded="false">Teams &#9662;</button>
+      <div id="teamsMenu" class="menu-list" hidden>
+        {% for t in teams %}<a href="#{{ t.slug }}" data-slug="{{ t.slug }}">{{ t.name }}</a>{% endfor %}
+      </div>
+    </div>
+    <div class="seg" id="viewSeg">
+      <button type="button" data-view="both" class="on">Both</button>
+      <button type="button" data-view="real">Real Stats</button>
+      <button type="button" data-view="strat">Strat Ratings</button>
+    </div>
+    <input id="search" type="search" placeholder="Find a player...">
+    <button id="collapseAll" type="button">Collapse all</button>
+  </div>
+</header>
+
+<main>
+{% for t in teams %}
+<section class="team" id="{{ t.slug }}">
+  <div class="team-head" role="button" tabindex="0" aria-expanded="true">
+    <img class="team-logo" src="{{ t.logo }}" alt="" onerror="this.hidden=true;">
+    <h2>{{ t.name }}{% if t.is_human %}<span class="badge">Human</span>{% endif %}</h2>
+    <div class="meta">{{ t.n_hit }} hitters &middot; {{ t.n_pit }} pitchers{% if t.payroll %} &middot; Payroll {{ t.payroll }}{% if cap %} of {{ cap }} cap{% endif %}{% endif %}</div>
+    <span class="chev">&#9662;</span>
+  </div>
+  <div class="team-body">
+    <div class="sec sec-real">
+      <h3>Real Stats</h3>
+      <h4>Hitters</h4>
+      {{ stat_table(real_hit_cols, t.real_hit) }}
+      <h4>Pitchers</h4>
+      {{ stat_table(real_pit_cols, t.real_pit) }}
+    </div>
+    <div class="sec sec-strat">
+      <h3>Strat-O-Matic Ratings</h3>
+      <h4>Hitters</h4>
+      {{ stat_table(strat_hit_cols, t.strat_hit) }}
+      <h4>Pitchers</h4>
+      {{ stat_table(strat_pit_cols, t.strat_pit) }}
+    </div>
+  </div>
+</section>
+{% endfor %}
+</main>
+
+<footer>Generated {{ generated }}</footer>
+
+<script>
+{% raw %}
+(function () {
+  const $  = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+  // ---- Teams menu ----
+  const btn = $('#teamsBtn'), menu = $('#teamsMenu');
+  function setMenu(open) { menu.hidden = !open; btn.setAttribute('aria-expanded', String(open)); }
+  btn.addEventListener('click', e => { e.stopPropagation(); setMenu(menu.hidden); });
+  document.addEventListener('click', () => setMenu(false));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') setMenu(false); });
+  menu.addEventListener('click', e => {
+    const a = e.target.closest('a');
+    if (!a) return;
+    const team = document.getElementById(a.getAttribute('href').slice(1));
+    if (team) team.classList.remove('collapsed');
+    setMenu(false);
+  });
+
+  // ---- view switch: both / real / strat ----
+  const seg = $('#viewSeg');
+  seg.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    document.body.dataset.view = b.dataset.view;
+    $$('button', seg).forEach(x => x.classList.toggle('on', x === b));
+  });
+
+  // ---- click a column header to sort ----
+  $$('table.stat').forEach(table => {
+    const heads = $$('thead th', table);
+    heads.forEach((th, i) => th.addEventListener('click', () => {
+      const first = th.classList.contains('num') ? 'desc' : 'asc';   // stats: biggest first
+      const dir = th.dataset.dir ? (th.dataset.dir === 'asc' ? 'desc' : 'asc') : first;
+      heads.forEach(h => delete h.dataset.dir);
+      th.dataset.dir = dir;
+      const tbody = $('tbody', table);
+      const rows = $$('tr:not(.none)', tbody);
+      rows.sort((a, b) => {
+        const x = a.children[i].dataset.sort, y = b.children[i].dataset.sort;
+        if (x === '' && y === '') return 0;
+        if (x === '') return 1;                  // blanks always last
+        if (y === '') return -1;
+        const nx = parseFloat(x), ny = parseFloat(y);
+        const cmp = (!isNaN(nx) && !isNaN(ny)) ? nx - ny : x.localeCompare(y);
+        return dir === 'asc' ? cmp : -cmp;
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    }));
+  });
+
+  // ---- player search ----
+  const search = $('#search');
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    $$('.team').forEach(team => {
+      let shown = 0;
+      $$('tbody tr:not(.none)', team).forEach(r => {
+        const hit = !q || r.dataset.name.includes(q);
+        r.hidden = !hit;
+        if (hit) shown++;
+      });
+      team.hidden = q !== '' && shown === 0;
+      if (q && shown) team.classList.remove('collapsed');
+    });
+  });
+
+  // ---- collapse / expand ----
+  $$('.team-head').forEach(h => {
+    const toggle = () => {
+      const t = h.parentElement;
+      t.classList.toggle('collapsed');
+      h.setAttribute('aria-expanded', String(!t.classList.contains('collapsed')));
+    };
+    h.addEventListener('click', toggle);
+    h.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    });
+  });
+  const collapseBtn = $('#collapseAll');
+  collapseBtn.addEventListener('click', () => {
+    const collapse = collapseBtn.textContent === 'Collapse all';
+    $$('.team').forEach(t => t.classList.toggle('collapsed', collapse));
+    collapseBtn.textContent = collapse ? 'Expand all' : 'Collapse all';
+  });
+
+  // ---- highlight the team you're looking at in the menu ----
+  const links = new Map($$('#teamsMenu a').map(a => [a.dataset.slug, a]));
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      links.forEach(l => l.classList.remove('active'));
+      const l = links.get(en.target.id);
+      if (l) l.classList.add('active');
+    });
+  }, { rootMargin: '-90px 0px -70% 0px' });
+  $$('.team').forEach(t => io.observe(t));
+})();
+{% endraw %}
+</script>
+</body>
+</html>

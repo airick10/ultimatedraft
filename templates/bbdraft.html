@@ -353,7 +353,7 @@ function showDraftComplete() {
     updateToggleBtn();
     clearInterval(pickTimer);
     const announcement = document.getElementById('tickerAnnouncement');
-    if (announcement) announcement.textContent = 'Draft complete! 🎉 Use "Export Excel" at the top to download the rosters.';
+    if (announcement) announcement.textContent = 'Draft complete! Use "Export Excel" at the top to download the rosters.';
     const timer = document.getElementById('tickerTimer');
     if (timer) timer.textContent = '--';
     document.getElementById('draftBtn').style.display = 'none';
@@ -599,6 +599,9 @@ function updateSalaryLine(teamName) {
 <div class="nav-strip">
     <a href="{{ url_for('main.start_baseball') }}"> Home</a>
     <a href="{{ url_for('main.bb_export', draftname=draftname) }}" style="margin-left:16px">Export Excel</a>
+    <a href="{{ url_for('main.log_export', sport=sport, draftname=draftname) }}" style="margin-left:16px">Export Log</a>
+    <a href="{{ url_for('main.bb_report', draftname=draftname) }}" style="margin-left:16px">Export Report</a>
+    <a href="{{ url_for('main.bb_report', draftname=draftname, view=1) }}" target="_blank" style="margin-left:16px">View Report</a>
 </div>
 
 <!-- ── Logo Strip(s) ── -->

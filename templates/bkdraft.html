@@ -366,7 +366,7 @@ function showDraftComplete() {
     updateToggleBtn();
     clearInterval(pickTimer);
     const announcement = document.getElementById('tickerAnnouncement');
-    if (announcement) announcement.textContent = 'Draft complete! 🎉';
+    if (announcement) announcement.textContent = 'Draft complete! Use "Export Excel" at the top to download the rosters.';
     const timer = document.getElementById('tickerTimer');
     if (timer) timer.textContent = '--';
     document.getElementById('draftBtn').style.display = 'none';
@@ -562,6 +562,8 @@ function updateSalaryLine(teamName) {
 
 <div class="nav-strip">
     <a href="{{ url_for('main.start_basketball') }}"> Home</a>
+    <a href="{{ url_for('main.bk_export', draftname=draftname) }}" style="margin-left:16px">Export Excel</a>
+    <a href="{{ url_for('main.log_export', sport=sport, draftname=draftname) }}" style="margin-left:16px">Export Log</a>
 </div>
 
 <div class="logo-strip" id="logoStrip"></div>
