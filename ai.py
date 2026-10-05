@@ -6,6 +6,7 @@ shape once their position-eligibility rules are worked out.
 """
 
 import random
+import math
 
 from .services import (
     assign_picks_to_slots_bb, assign_picks_to_slots_bk, assign_picks_to_slots_fb,
@@ -30,6 +31,20 @@ def parse_salary(raw):
         return float(cleaned)
     except ValueError:
         return 0.0
+
+def to_float(value, default=0.0):
+    """Tolerant number parser: handles None, '$1,200', '45%', and junk like 'Feb-00' (-> default)."""
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        number = float(value)
+    else:
+        text = str(value).strip().replace('$', '').replace(',', '').rstrip('%')
+        try:
+            number = float(text)
+        except ValueError:
+            return default
+    return number if math.isfinite(number) else default
 
 
 POS_ABBR_TO_CODE = {
@@ -413,10 +428,10 @@ def check_functions_bk(code):
         'F':  lambda p: p.get('Pos') == 'F',
         'G':  lambda p: p.get('Pos') == 'G',
         'UT': lambda p: True,
-        11:   lambda p: float(p.get('Omade', 0) or 0) > 10,
-        12:   lambda p: float(p.get('Dsteal', 0) or 0) > 8 or p.get('Block') not in (None, ''),
-        13:   lambda p: float(p.get('fg3_pct', 0) or 0) >= 0.35,
-        14:   lambda p: float(p.get('rbspgm', 0) or 0) >= 6,
+        11:   lambda p: to_float(p.get('Omade')) > 10,
+        12:   lambda p: to_float(p.get('Dsteal')) > 8 or p.get('Block') not in (None, ''),
+        13:   lambda p: to_float(p.get('fg3_pct')) >= 0.35,
+        14:   lambda p: to_float(p.get('rbspgm')) >= 6,
     }
     return table.get(code, lambda p: True)
 
@@ -434,8 +449,8 @@ def ai_select_snippet_bk(playerpool, threshold, position_code, focus_code, avg_s
     for player in playerpool:
         if not check(player):
             continue
-        salary = parse_salary(player.get('Salary'))
-        if salary > avg_salary or salary < 600:
+        # salary only matters when there's a budget to stay under
+        if avg_salary != float('inf') and parse_salary(player.get('Salary')) > avg_salary:
             continue
         if threshold < 0 or counter > threshold:
             return player.get('id')
@@ -449,13 +464,21 @@ def top_four_grabs_bk(playerpool, position_code, focus_code, avg_salary):
     return ai_select_snippet_bk(playerpool, threshold, position_code, focus_code, avg_salary)
 
 
+def _quality_bk(p):
+    """Rough overall rating from the real stats. Used when the chosen stat has no data."""
+    return to_float(p.get('ptspgm')) + to_float(p.get('rbspgm')) + to_float(p.get('astpgm'))
+
+
 def ai_sort_pool_bk(stat_key, players):
-    """All basketball stats are higher-is-better, per confirmation."""
-    if stat_key == 'Salary':
-        keyfunc = lambda r: parse_salary(r.get('Salary'))
+    """Higher is better. If nobody has real data for this stat (e.g. Salary missing from the JSON),
+    fall back to an overall rating so the order isn't just alphabetical.
+    Ties are broken randomly, never alphabetically."""
+    values = [to_float(p.get(stat_key)) for p in players]
+    if not values or max(values) == min(values):
+        key = _quality_bk
     else:
-        keyfunc = lambda r: float(r.get(stat_key, 0) or 0)
-    return sorted(players, key=keyfunc, reverse=True)
+        key = lambda p: to_float(p.get(stat_key))
+    return sorted(players, key=lambda p: (-key(p), random.random()))
 
 
 AI_FOCUS_TABLE_BK = {
@@ -514,7 +537,17 @@ def ai_select_bk(team, roster_slots, team_picks, all_players, round_num, cap, sa
     else:
         avg_salary = float('inf')
 
-    return auto_select_bk(position_code, pool, config['focus'], config['keys'], avg_salary)
+    pick = auto_select_bk(position_code, pool, config['focus'], config['keys'], avg_salary)
+
+    # the archetype's focus filter found nobody: drop it and keep the position
+    if pick is None:
+        pick = auto_select_bk(position_code, pool, 0, config['keys'], avg_salary)
+
+    # still nobody: best scorer available who fits the budget
+    if pick is None:
+        pick = auto_select_bk('UT', pool, 0, ['ptspgm'] * 6, avg_salary)
+
+    return pick
 
 # ============================================================
 # FOOTBALL
