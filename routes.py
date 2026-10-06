@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, abort, current_app, redirect, url_for, send_file
-from .ai import ai_select_bb, ai_select_bk, ai_select_fb, parse_salary
+from .ai import ai_select_bb, ai_select_bk, ai_select_fb, parse_salary, to_float
 from .services import (
     load_baseball,
     load_basketball,
@@ -47,7 +47,10 @@ from .services import (
     TWO_WAY_BB
 )
 from datetime import datetime
-from .exports import build_bb_workbook
+from .exports import (
+    build_bb_workbook, build_bk_workbook, build_fb_workbook,
+    build_log_text, build_bb_report_context, build_bk_report_context, build_fb_report_context,
+)
 import random
 import io
 from collections import Counter
@@ -149,6 +152,7 @@ def bb_load():
         cap=meta.get("cap", ""),
         draftname=meta.get("draftname", draft_data.get("draftname", "")),
         players=players,
+        label_by_id=roster_labels_bb(players),
         draft_log=log,
         draft_file=str(draft_data.get("player_path", "")),
         sport='bb',
@@ -294,6 +298,7 @@ def bb_draft():
         team_slots=team_slots,
         pool=pool,
         cap=cap,
+        label_by_id=roster_labels_bb(people),
         draftname=draftname,
         players=people,
         draft_file=output_path,
@@ -333,6 +338,26 @@ def bb_export(draftname):
         as_attachment=True,
         download_name=f"{draftname}_rosters.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@main.route("/bb_report/<draftname>")
+def bb_report(draftname):
+    if Path(draftname).name != draftname:
+        abort(400, "Bad draft name.")
+    if not (Path("drafts") / f"{draftname}_bb.json").exists():
+        abort(404, "Draft not found.")
+
+    html = render_template("report.html", **build_bb_report_context(draftname))
+    if request.args.get("view") == "1":      # ?view=1 shows it in the browser instead of downloading
+        return html
+
+    buf = io.BytesIO(html.encode("utf-8"))
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=f"{draftname}_baseball_report.html",
+        mimetype="text/html",
     )
 
 #-------- BASKETBALL -----------------------------------------------------------------
@@ -573,6 +598,45 @@ def bk_delete():
     except ValueError as exc:
         abort(400, str(exc))
     return redirect(url_for("main.start_basketball"))
+
+
+@main.route("/bk_export/<draftname>")
+def bk_export(draftname):
+    if Path(draftname).name != draftname:
+        abort(400, "Bad draft name.")
+    if not (Path("drafts") / f"{draftname}_bk.json").exists():
+        abort(404, "Draft not found.")
+
+    wb = build_bk_workbook(draftname)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=f"{draftname}_rosters.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@main.route("/bk_report/<draftname>")
+def bk_report(draftname):
+    if Path(draftname).name != draftname:
+        abort(400, "Bad draft name.")
+    if not (Path("drafts") / f"{draftname}_bk.json").exists():
+        abort(404, "Draft not found.")
+
+    html = render_template("report.html", **build_bk_report_context(draftname))
+    if request.args.get("view") == "1":
+        return html
+
+    buf = io.BytesIO(html.encode("utf-8"))
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=f"{draftname}_basketball_report.html",
+        mimetype="text/html",
+    )
 
 # --------- FOOTBALL -------------------------------------------------------------    
 
@@ -819,6 +883,43 @@ def fb_delete():
     return redirect(url_for("main.start_football"))
 
 
+@main.route("/fb_export/<draftname>")
+def fb_export(draftname):
+    if Path(draftname).name != draftname:
+        abort(400, "Bad draft name.")
+    if not (Path("drafts") / f"{draftname}_fb.json").exists():
+        abort(404, "Draft not found.")
+
+    wb = build_fb_workbook(draftname)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=f"{draftname}_rosters.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+@main.route("/fb_report/<draftname>")
+def fb_report(draftname):
+    if Path(draftname).name != draftname:
+        abort(400, "Bad draft name.")
+    if not (Path("drafts") / f"{draftname}_fb.json").exists():
+        abort(404, "Draft not found.")
+
+    html = render_template("report.html", **build_fb_report_context(draftname))
+    if request.args.get("view") == "1":
+        return html
+
+    buf = io.BytesIO(html.encode("utf-8"))
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=f"{draftname}_football_report.html",
+        mimetype="text/html",
+    )
+
 # ------ AI CALLS (Baseball) -------------
 
 def make_ai_pick_bb(draftname):
@@ -959,13 +1060,20 @@ def make_ai_pick_bk(draftname):
     cap                = meta.get('cap')
     salary_cap_enabled = parse_salary(cap) > 0
 
-    player_id = ai_select_bk(team, roster_slots, team_picks, players, round_num, cap, salary_cap_enabled)
+    try:
+        player_id = ai_select_bk(team, roster_slots, team_picks, players, round_num, cap, salary_cap_enabled)
+    except Exception:
+        traceback.print_exc()
+        player_id = None
 
     if player_id is None:
+        print(f">>> BK AI fallback: {team['team_name']} at pick {meta['current_pick']}; "
+              f"Salary sample: {players[0].get('Salary')!r}")
         undrafted = [p for p in players if p.get('team_id', 0) == 0]
         if not undrafted:
             return None
-        undrafted.sort(key=lambda p: parse_salary(p.get('Salary')))
+        # best scorer first, random among ties (never just alphabetical)
+        undrafted.sort(key=lambda p: (-to_float(p.get('ptspgm')), random.random()))
         player_id = undrafted[0].get('id')
 
     player = next((p for p in players if str(p.get('id')) == str(player_id)), None)
@@ -1132,6 +1240,17 @@ AI_LOOPS       = set()   # {(draftname, sport), ...}  prevents duplicate AI loop
 def is_draft_complete(meta, sport):
     return meta['current_pick'] > meta['num_teams'] * ROSTER_SIZE[sport]
 
+def roster_labels_bb(players):
+    """{player id: 'Cal Ripken (R)'}: full name plus batting hand (hitters) or throwing hand (pitchers)."""
+    out = {}
+    for p in players:
+        name = f"{p.get('FirstName') or ''} {p.get('LastName') or ''}".strip()
+        raw = p.get("Bats") if p.get("kind") == "hitter" else p.get("Throws")
+        hand = str(raw or "").strip()[:1].upper()
+        if name:
+            out[str(p.get("id"))] = f"{name} ({hand})" if hand else name
+    return out
+
 
 def maybe_add_twin_bb(player, players, team, pick_num, log_path):
     """If the drafted player has a two-way twin, assign the twin to the same team.
@@ -1162,6 +1281,25 @@ def read_cap(form):
         raw = (form.get("cap_amount") or "").strip()
     raw = raw.replace("$", "").replace(",", "")
     return raw if parse_salary(raw) > 0 else ""
+
+
+@main.route("/log_export/<sport>/<draftname>")
+def log_export(sport, draftname):
+    if sport not in ("bb", "bk", "fb"):
+        abort(404)
+    if Path(draftname).name != draftname:
+        abort(400, "Bad draft name.")
+    if not (Path("drafts") / f"{draftname}_{sport}_log.json").exists():
+        abort(404, "Draft log not found.")
+
+    text = build_log_text(draftname, sport)
+    buf = io.BytesIO(text.encode("utf-8-sig"))     # BOM so Notepad shows accents and dashes correctly
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=f"{draftname}_{sport}_draft_log.txt",
+        mimetype="text/plain",
+    )
 
 # ------ SOCKET IO CALLS -------
 
