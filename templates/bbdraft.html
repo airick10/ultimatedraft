@@ -34,6 +34,7 @@ const SALARY_CAP  = parseFloat("{{ cap }}") || 0;      // 0 = no cap
 const INITIAL_LOG = {{ draft_log|tojson }};
 const salaryById  = {};     // player id -> salary
 const spentByTeam = {};     // team name -> total salary drafted
+const LABELS = {{ label_by_id|tojson }};
 
 // ── SocketIO connection ──
 socket.on('connect', () => {
@@ -426,7 +427,7 @@ function applyPickToUI(e) {
             slot = teamRoster.querySelector(`.t-pick:not(.filled)`);
         }
         if (slot) {
-            slot.textContent = `${e.pos}: ${e.player}`;
+            slot.textContent = `${e.pos}: ${LABELS[String(e.id)] || e.player}`;
             slot.classList.add('filled');
         }
     }
@@ -790,7 +791,7 @@ function updateSalaryLine(teamName) {
     {% for slot in team_slots[team.team_id] %}    {% set pick = assigned[loop.index0] %}
     {% if pick %}
     <div class="t-pick filled" data-slot="{{ slot }}" id="slot-{{ team.name }}-{{ loop.index0 }}">
-        {{ pick.pos }}: {{ pick.player }}
+        {{ pick.pos }}: {{ label_by_id.get(pick.id|string, pick.player) }}
     </div>
     {% else %}
     <div class="t-pick" data-slot="{{ slot }}" id="slot-{{ team.name }}-{{ loop.index0 }}">

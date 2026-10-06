@@ -584,6 +584,8 @@ function updateSalaryLine(teamName) {
     <a href="{{ url_for('main.start_football') }}"> Home</a>
     <a href="{{ url_for('main.fb_export', draftname=draftname) }}" style="margin-left:16px">Export Excel</a>
     <a href="{{ url_for('main.log_export', sport=sport, draftname=draftname) }}" style="margin-left:16px">Export Log</a>
+    <a href="{{ url_for('main.fb_report', draftname=draftname) }}" style="margin-left:16px">Export Report</a>
+    <a href="{{ url_for('main.fb_report', draftname=draftname, view=1) }}" target="_blank" style="margin-left:16px">View Report</a>
 </div>
 
 <!-- ── Logo Strip(s) ── -->
