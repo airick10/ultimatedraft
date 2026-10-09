@@ -10,9 +10,11 @@ import math
 
 from .services import (
     assign_picks_to_slots_bb, assign_picks_to_slots_bk, assign_picks_to_slots_fb,
-    SHORT_POS_TO_SLOT_BB, SHORT_POS_TO_SLOT_FB, HB_FB_OVERFLOW,
+    SHORT_POS_TO_SLOT_BB, SHORT_POS_TO_SLOT_FB, HB_FB_OVERFLOW, TWO_WAY_BB, TWO_WAY_FB
 )
 from collections import Counter
+from .cap import CapChecker, CapRules, salary_of
+from .tiers import tier_pick
 
 
 # ============================================================
@@ -347,7 +349,8 @@ def auto_select_pitcher_bb(position, hitters_pool, pitchers_pool, round_num, foc
 def ai_select_bb(team, roster_slots, team_picks, all_players, round_num, cap, salary_cap_enabled):
     """
     Port of aipicks.py's aiSelect() for one team's single pick.
-    Returns a player id, or None if nothing eligible was found.
+    With a salary cap, only players the team can afford while still being able to finish
+    its roster under the cap are candidates. Returns a player id, or None.
     """
     ai_focus = team.get('AIFocus', 1)
     config = AI_FOCUS_TABLE.get(ai_focus, AI_FOCUS_TABLE[1])
@@ -357,34 +360,27 @@ def ai_select_bb(team, roster_slots, team_picks, all_players, round_num, cap, sa
     pos_counts  = hitter_pos_counts_bb(team_picks)
     base_slots  = Counter(roster_slots)
 
-    slots_left = max(len(roster_slots) - len(team_picks), 1)
-
+    undrafted = [p for p in all_players if p.get('team_id', 0) == 0]
     if salary_cap_enabled:
-        spent = sum(
-            parse_salary(p.get('s_sal'))
-            for p in all_players
-            if p.get('team_id', 0) == team['team_id']
-        )
-        budget_mode = random.randrange(100) < 50 and round_num > 7
-        if round_num > 18 or budget_mode:
-            remaining = parse_salary(cap) - spent
-            avg_salary = remaining / slots_left if remaining > 0 else 0
-        else:
-            avg_salary = float('inf')
+        checker = make_cap_checker('bb', roster_slots, team_picks, all_players, team['team_id'], cap)
+        affordable = [p for p in undrafted if checker.feasible(p)]
     else:
-        avg_salary = float('inf')
+        affordable = undrafted
+    avg_salary = float('inf')          # the cap checker replaces the old late-round "budget mode"
+    # tiered players first (tier 1, then tier 2), as long as they fit an open slot
+    pick = tier_pick(affordable, tier_group_bb, tier_open_groups_bb(open_counts))
+    if pick is not None:
+        return pick
 
     def attempt(variety):
         pc = pos_counts if variety else None
         hitters_pool = [
-            p for p in all_players
-            if p.get('kind') == 'hitter' and p.get('team_id', 0) == 0
-            and fits_open_slots_bb(p, open_counts, pc, base_slots)
+            p for p in affordable
+            if p.get('kind') == 'hitter' and fits_open_slots_bb(p, open_counts, pc, base_slots)
         ]
         pitchers_pool = [
-            p for p in all_players
-            if p.get('kind') == 'pitcher' and p.get('team_id', 0) == 0
-            and fits_open_slots_bb(p, open_counts, pc, base_slots)
+            p for p in affordable
+            if p.get('kind') == 'pitcher' and fits_open_slots_bb(p, open_counts, pc, base_slots)
         ]
         if config['mode'] == 'H':
             pick = auto_select_hitter_bb(position, hitters_pool, pitchers_pool, round_num, config['focus'], config['keys'], avg_salary)
@@ -399,7 +395,14 @@ def ai_select_bb(team, roster_slots, team_picks, all_players, round_num, cap, sa
 
     pick = attempt(True)
     if pick is None:
-        pick = attempt(False)    # only break the variety rule if there's no other option
+        pick = attempt(False)          # only break the UT variety rule if there's no other option
+
+    # last resort (a team that can no longer make the cap): the cheapest player who fits an open slot
+    if pick is None:
+        fits = [p for p in undrafted if fits_open_slots_bb(p, open_counts)]
+        fits.sort(key=lambda p: (salary_of(p) <= 0, salary_of(p), random.random()))
+        pick = fits[0].get('id') if fits else None
+
     return pick
 
 
@@ -421,17 +424,22 @@ def eligible_position_bk(roster_slots, team_picks):
     return random.choice(open_labels)
 
 
+def _is_def(p):
+    return p.get('kind') == 'defense'
+
+
 def check_functions_bk(code):
     table = {
-        0:    lambda p: True,
-        'C':  lambda p: p.get('Pos') == 'C',
-        'F':  lambda p: p.get('Pos') == 'F',
-        'G':  lambda p: p.get('Pos') == 'G',
-        'UT': lambda p: True,
-        11:   lambda p: to_float(p.get('Omade')) > 10,
-        12:   lambda p: to_float(p.get('Dsteal')) > 8 or p.get('Block') not in (None, ''),
-        13:   lambda p: to_float(p.get('fg3_pct')) >= 0.35,
-        14:   lambda p: to_float(p.get('rbspgm')) >= 6,
+        0:     lambda p: not _is_def(p),
+        'C':   lambda p: p.get('Pos') == 'C',
+        'F':   lambda p: p.get('Pos') == 'F',
+        'G':   lambda p: p.get('Pos') == 'G',
+        'UT':  lambda p: not _is_def(p),
+        'Def': _is_def,
+        11:    lambda p: to_float(p.get('Omade')) > 10,
+        12:    lambda p: to_float(p.get('Dsteal')) > 8 or p.get('Block') not in (None, ''),
+        13:    lambda p: to_float(p.get('fg3_pct')) >= 0.35,
+        14:    lambda p: to_float(p.get('rbspgm')) >= 6,
     }
     return table.get(code, lambda p: True)
 
@@ -511,6 +519,12 @@ def auto_select_bk(position_code, pool, focus_code, keys, avg_salary):
     return top_four_grabs_bk(sorted_pool, position_code, focus_code, avg_salary)
 
 
+def _defense_score(p):
+    """Sort key (ascending): priciest defense first, then the fewest opponent makes."""
+    made = sum(to_float(p.get(k)) for k in ('Omade', 'Pmade', 'Imade', 'Fmade', '3made'))
+    return (-parse_salary(p.get('Salary')), made)
+
+
 def ai_select_bk(team, roster_slots, team_picks, all_players, round_num, cap, salary_cap_enabled):
     """Port of aiSelect() for basketball -- one team's single pick."""
     ai_focus = team.get('AIFocus', 1)
@@ -519,33 +533,48 @@ def ai_select_bk(team, roster_slots, team_picks, all_players, round_num, cap, sa
     if position_code is None:
         return None  # roster already full
 
-    pool = [p for p in all_players if p.get('team_id', 0) == 0]
-    slots_left = max(len(roster_slots) - len(team_picks), 1)
-
+    undrafted = [p for p in all_players if p.get('team_id', 0) == 0]
     if salary_cap_enabled:
-        spent = sum(
-            parse_salary(p.get('Salary'))
-            for p in all_players
-            if p.get('team_id', 0) == team['team_id']
-        )
-        budget_mode = random.randrange(100) < 50 and round_num > 7
-        if round_num > 8 or budget_mode:  # basketball rosters are 10 slots, not 25 -- budget mode kicks in earlier
-            remaining = parse_salary(cap) - spent
-            avg_salary = remaining / slots_left if remaining > 0 else 0
-        else:
-            avg_salary = float('inf')
+        checker = make_cap_checker('bk', roster_slots, team_picks, all_players, team['team_id'], cap)
+        affordable = [p for p in undrafted if checker.feasible(p)]
     else:
-        avg_salary = float('inf')
+        affordable = undrafted
+    avg_salary = float('inf')
 
+    # tiered players first (tier 1, then tier 2), as long as they fit an open slot
+    pick = tier_pick(affordable, tier_group_bk, Counter(open_position_lottery_bk(roster_slots, team_picks)))
+    if pick is not None:
+        return pick
+
+    def cheapest(candidates):
+        candidates = sorted(candidates, key=lambda p: (salary_of(p) <= 0, salary_of(p), random.random()))
+        return candidates[0].get('id') if candidates else None
+
+    # the slot this team is filling is the defense: choose among the defense units
+    if position_code == 'Def':
+        defenses = sorted((p for p in affordable if _is_def(p)), key=_defense_score)
+        pick = top_four_grabs_bk(defenses, 'Def', 0, avg_salary)
+        if pick is None:
+            pick = cheapest(p for p in undrafted if _is_def(p))
+        return pick
+
+    pool = [p for p in affordable if not _is_def(p)]
     pick = auto_select_bk(position_code, pool, config['focus'], config['keys'], avg_salary)
 
     # the archetype's focus filter found nobody: drop it and keep the position
     if pick is None:
         pick = auto_select_bk(position_code, pool, 0, config['keys'], avg_salary)
 
-    # still nobody: best scorer available who fits the budget
+    # still nobody: best scorer available
     if pick is None:
         pick = auto_select_bk('UT', pool, 0, ['ptspgm'] * 6, avg_salary)
+
+    # last resort (a team that can no longer make the cap): the cheapest player for the open slot
+    if pick is None:
+        fits = check_functions_bk(position_code)
+        pick = cheapest(p for p in undrafted if not _is_def(p) and fits(p))
+        if pick is None:
+            pick = cheapest(p for p in undrafted if not _is_def(p))
 
     return pick
 
@@ -569,12 +598,16 @@ def open_position_lottery_fb(roster_slots, team_picks):
 
 
 def eligible_position_fb(roster_slots, team_picks):
-    """Returns (slot_label, pool_name) for a randomly chosen open slot, or (None, None) if full."""
+    """Returns (slot_label, pool_name) for a randomly chosen open slot, or (None, None) if full.
+    A FLEX slot (from a two-way player) is only used when it's the last one open."""
     open_labels = open_position_lottery_fb(roster_slots, team_picks)
     if not open_labels:
         return None, None
-    slot_label = random.choice(open_labels)
-    return slot_label, SLOT_TO_POOL_FB.get(slot_label)
+    regular = [label for label in open_labels if label != 'FLEX']
+    if regular:
+        slot_label = random.choice(regular)
+        return slot_label, SLOT_TO_POOL_FB.get(slot_label)
+    return 'FLEX', random.choice(['passer', 'rusher', 'receiver'])
 
 
 FB_ASCENDING_STATS = {'s_Run', 's_Pass', 's_YdspPlay'}  # lower is better
@@ -656,45 +689,117 @@ def ai_select_fb(team, roster_slots, team_picks, all_players, round_num, cap, sa
         return None  # roster already full
 
     stat_key = config.get(pool_name, 'Salary')
-    slots_left = max(len(roster_slots) - len(team_picks), 1)
 
+    undrafted = [p for p in all_players if p.get('team_id', 0) == 0]
     if salary_cap_enabled:
-        spent = sum(
-            parse_salary(p.get('Salary'))
-            for p in all_players
-            if p.get('team_id', 0) == team['team_id']
-        )
-        budget_mode = random.randrange(100) < 50 and round_num > 5
-        if round_num > 10 or budget_mode:  # 13-slot roster -- scaled down from baseball's 18/25
-            remaining = parse_salary(cap) - spent
-            avg_salary = remaining / slots_left if remaining > 0 else 0
-        else:
-            avg_salary = float('inf')
+        checker = make_cap_checker('fb', roster_slots, team_picks, all_players, team['team_id'], cap)
+        affordable = [p for p in undrafted if checker.feasible(p)]
     else:
-        avg_salary = float('inf')
+        affordable = undrafted
+    avg_salary = float('inf')
 
-    pick = auto_select_fb(slot_label, pool_name, all_players, stat_key, avg_salary)
+    # tiered players first (tier 1, then tier 2), as long as they fit an open slot
+    pick = tier_pick(affordable, tier_group_fb, Counter(open_position_lottery_fb(roster_slots, team_picks)))
+    if pick is not None:
+        return pick
 
-    # nobody at that exact position was available/affordable: take the best-paid
-    # player who fits ANY open slot. Strict first; HB/FB cross-fill only if nothing else works.
+    pick = auto_select_fb(slot_label, pool_name, affordable, stat_key, avg_salary)
+
+    # nobody at that exact position was available/affordable: take the best-paid player who fits
+    # ANY open slot. Strict first; HB/FB cross-fill only if nothing else works.
+    open_labels = set(open_position_lottery_fb(roster_slots, team_picks))
+    open_labels = (open_labels - {'FLEX'}) or open_labels      # use FLEX only if it's all that's left
     if pick is None:
-        open_labels = set(open_position_lottery_fb(roster_slots, team_picks))
         for strict in (True, False):
-            pool = [
-                p for p in all_players
-                if p.get('team_id', 0) == 0 and any(fits_slot_fb(p, s, strict) for s in open_labels)
-            ]
+            pool = [p for p in affordable if any(fits_slot_fb(p, s, strict) for s in open_labels)]
             pick = ai_select_snippet_fb(ai_sort_pool_fb('Salary', pool), -1, avg_salary)
             if pick is not None:
                 break
+
+    # last resort (a team that can no longer make the cap): the cheapest player who fits an open slot
+    if pick is None:
+        fits = [p for p in undrafted if any(fits_slot_fb(p, s, False) for s in open_labels)]
+        fits.sort(key=lambda p: (salary_of(p) <= 0, salary_of(p), random.random()))
+        pick = fits[0].get('id') if fits else None
 
     return pick
 
 def fits_slot_fb(player, slot_label, strict=True):
     """True if this player belongs in the given open slot.
-    strict=True: exact position only (a real FB for the FB slot, a real HB for an HB slot).
-    strict=False: HB and FB may fill each other's slots (last-resort fallback)."""
+    strict=True: exact position only. strict=False: HB and FB may fill each other's slots.
+    A FLEX slot takes anyone."""
+    if slot_label == 'FLEX':
+        return True
     natural = SHORT_POS_TO_SLOT_FB.get(player.get('short_pos', ''), '')
     if natural == slot_label:
         return True
     return (not strict) and HB_FB_OVERFLOW.get(slot_label) == natural
+
+
+# ============================================================
+# SALARY CAP
+# ============================================================
+
+CAP_SAFETY = 1.10    # the AI keeps 10% more than the bare minimum needed to finish its roster
+
+CAP_RULES = {
+    'bb': CapRules(
+        natural=natural_slot_bb,
+        free={'UT': lambda p: p.get('kind') == 'hitter', 'FLEX': lambda p: True},
+        priority=lambda p: [natural_slot_bb(p), 'UT' if p.get('kind') == 'hitter' else None, 'FLEX'],
+    ),
+    'bk': CapRules(
+        natural=lambda p: 'Def' if p.get('kind') == 'defense' else p.get('Pos', ''),
+        free={'UT': lambda p: p.get('kind') != 'defense'},
+        priority=lambda p: ['Def'] if p.get('kind') == 'defense' else [p.get('Pos', ''), 'UT'],
+    ),
+    'fb': CapRules(
+        natural=lambda p: SHORT_POS_TO_SLOT_FB.get(p.get('short_pos', ''), ''),
+        free={'FLEX': lambda p: True},
+        priority=lambda p: [
+            SHORT_POS_TO_SLOT_FB.get(p.get('short_pos', ''), ''),
+            HB_FB_OVERFLOW.get(SHORT_POS_TO_SLOT_FB.get(p.get('short_pos', ''), '')),
+            'FLEX',
+        ],
+    ),
+}
+TWIN_MAPS = {'bb': TWO_WAY_BB, 'bk': {}, 'fb': TWO_WAY_FB}
+_ASSIGN   = {'bb': assign_picks_to_slots_bb, 'bk': assign_picks_to_slots_bk, 'fb': assign_picks_to_slots_fb}
+
+
+def open_slot_labels(sport, roster_slots, team_picks):
+    assigned = _ASSIGN[sport](roster_slots, team_picks)
+    return [label for filled, label in zip(assigned, roster_slots) if filled is None]
+
+
+def make_cap_checker(sport, roster_slots, team_picks, all_players, team_id, cap, safety=CAP_SAFETY):
+    """roster_slots must already include a FLEX slot for each two-way player the team has."""
+    pool  = [p for p in all_players if p.get('team_id', 0) == 0]
+    spent = sum(salary_of(p) for p in all_players if p.get('team_id', 0) == team_id)
+    return CapChecker(
+        CAP_RULES[sport], pool, open_slot_labels(sport, roster_slots, team_picks),
+        spent, parse_salary(cap), twin_map=TWIN_MAPS[sport], safety=safety,
+    )
+
+# ============================================================
+# TIER GROUPS: which slots count as "his position" for tier targeting
+# ============================================================
+
+def tier_group_bb(p):
+    slot = natural_slot_bb(p)
+    return 'OF' if slot in ('LF', 'CF', 'RF') else slot       # outfielders share one group
+
+
+def tier_open_groups_bb(open_counts):
+    groups = Counter()
+    for label, n in open_counts.items():
+        groups['OF' if label in ('LF', 'CF', 'RF') else label] += n
+    return groups
+
+
+def tier_group_bk(p):
+    return 'Def' if _is_def(p) else p.get('Pos', '')
+
+
+def tier_group_fb(p):
+    return SHORT_POS_TO_SLOT_FB.get(p.get('short_pos', ''), '')

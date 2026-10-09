@@ -12,6 +12,7 @@ from collections import Counter
 input_file_baseball_hitters = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltimebatters.json"
 input_file_baseball_pitchers = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltimepitchers.json"
 input_file_basketball = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltimebasketball.json"
+input_file_basketball_defense = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltimebasketball_defense.json"
 input_file_football_passing = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltime_football_passing.json"
 input_file_football_receiving = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltime_football_receiving.json"
 input_file_football_rushing = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltime_football_rushing.json"
@@ -48,6 +49,18 @@ for _h, _p in TWO_WAY_PAIRS_BB:
     TWO_WAY_BB[f"h_{_h}"] = f"p_{_p}"
     TWO_WAY_BB[f"p_{_p}"] = f"h_{_h}"
 
+
+TWO_WAY_PAIRS_FB = [
+    ("qb_127", "wr_245"),     # Kordell Stewart
+    ("hb_134", "wr_229"),     # Deebo Samuel
+    ("hb_24", "wr_8"),     # Billy Cannon
+]
+
+TWO_WAY_FB = {}
+for _a, _b in TWO_WAY_PAIRS_FB:
+    TWO_WAY_FB[_a] = _b
+    TWO_WAY_FB[_b] = _a
+
 def _read_json(src: str):
     if src.startswith("http://") or src.startswith("https://"):
         resp = requests.get(src, timeout=10)
@@ -81,6 +94,10 @@ def load_pitchers_json():
 
 def load_basketball_json():
     data = _read_json(input_file_basketball)  # likely a list
+    return _index_by_id(data) if isinstance(data, list) else data
+
+def load_basketball_defense_json():
+    data = _read_json(input_file_basketball_defense)
     return _index_by_id(data) if isinstance(data, list) else data
 
 def load_football_passing_json():
@@ -374,31 +391,37 @@ def save_baseball_meta(draftname, meta):
 
 
 
+def unit_label(d):
+    """'2025 Washington'. Your sample has Team and Year swapped (Team=2025, Year='Washington'),
+    so whichever value is all digits goes first."""
+    a, b = str(d.get("Year") or "").strip(), str(d.get("Team") or "").strip()
+    if b.isdigit() and not a.isdigit():
+        a, b = b, a
+    return f"{a} {b}".strip()
+
+
+def _defense_units():
+    out = []
+    for _id, d in load_basketball_defense_json().items():
+        uid = f"d_{_id}"                       # prefixed so it can never collide with a player's ID
+        out.append({
+            **d,
+            "id": uid, "ID": uid,
+            "kind": "defense", "Pos": "DEF", "short_pos": "DEF",
+            "name": unit_label(d),
+        })
+    return out
+
+
 def load_basketball(pool, num_teams):
     players = load_basketball_json()
+    defense = _defense_units()
     people = []
+
     if pool == "full" or pool == "custom":
         for _id, h in players.items():
-            people.append({
-                "id":_id,
-                **h
-                })
-        '''
-        people = []
-        for _id, h in players.items():
-            pos = h.get("s_fielding", "").split("-")[0].upper()
-            if pos == "":
-                pos = "DH"
-            people.append({
-                "kind": "hitter",
-                "short_pos": pos,
-                "id": _id,                 # keep as string to match your dict keys
-                **h
-            })
-        '''
-
-        # Sort by LastName then FirstName; missing keys fall back to ""
-        # people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
+            people.append({"id": _id, **h})
+        people.extend(defense)
     else:
         centers = []
         forwards = []
@@ -414,23 +437,24 @@ def load_basketball(pool, num_teams):
             else:
                 guards.append(player)
 
-        num_centers  = num_teams * 2
-        num_forwards = num_teams * 4
-        num_guards   = num_teams * 4
+        # 11 player slots per team (1 C, 2 F, 2 G, 6 UT) plus a spare of each position, and 2 defenses
+        num_centers  = num_teams * 3
+        num_forwards = num_teams * 5
+        num_guards   = num_teams * 5
 
         people = (
             random.sample(centers,  min(num_centers,  len(centers)))  +
             random.sample(forwards, min(num_forwards, len(forwards))) +
-            random.sample(guards,   min(num_guards,   len(guards)))
+            random.sample(guards,   min(num_guards,   len(guards)))   +
+            random.sample(defense,  min(num_teams * 2, len(defense)))
         )
 
-    people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
+    # defense units go last in the pool
+    people.sort(key=lambda r: (r.get("kind") == "defense", r.get("LastName", ""), r.get("FirstName", "")))
     return people
 
 
-from datetime import datetime
-from pathlib import Path
-import json
+
 
 
 def initial_save_basketball_json(players, draftname):
@@ -443,7 +467,7 @@ def initial_save_basketball_json(players, draftname):
             "id": p.get("id") or p.get("ID")
         })
 
-    people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
+    people.sort(key=lambda r: (r.get("kind") == "defense", r.get("LastName", ""), r.get("FirstName", "")))
 
     filename = f"{draftname}_bk.json"
 
@@ -1057,7 +1081,7 @@ SHORT_POS_TO_SLOT_FB = {
 HB_FB_OVERFLOW = {'HB': 'FB', 'FB': 'HB'}
 
 SHORT_POS_TO_SLOT_BK = {
-    'C': 'C', 'F': 'F', 'G': 'G',
+    'C': 'C', 'F': 'F', 'G': 'G', 'DEF': 'Def',
 }
 
 def assign_picks_to_slots_bb(roster_slots, team_picks):
@@ -1099,9 +1123,8 @@ def assign_picks_to_slots_bb(roster_slots, team_picks):
 
 def assign_picks_to_slots_bk(roster_slots, team_picks):
     """
-    Same pattern as assign_picks_to_slots_bb. C/F/G are their own buckets;
-    once a position's dedicated slots are full, the pick overflows into UT,
-    then falls back to any open slot as a last resort.
+    C/F/G are their own buckets; once a position's slots are full, the pick overflows into UT.
+    A defense unit only ever goes in the Def slot, and players never take the Def slot.
     """
     assigned = [None] * len(roster_slots)
     open_by_label = {}
@@ -1112,13 +1135,16 @@ def assign_picks_to_slots_bk(roster_slots, team_picks):
         slot_label = SHORT_POS_TO_SLOT_BK.get(pick.get('pos', ''), 'UT')
         target = None
 
-        if open_by_label.get(slot_label):
+        if slot_label == 'Def':
+            if open_by_label.get('Def'):
+                target = open_by_label['Def'].pop(0)
+        elif open_by_label.get(slot_label):
             target = open_by_label[slot_label].pop(0)
-        elif slot_label != 'UT' and open_by_label.get('UT'):
+        elif open_by_label.get('UT'):
             target = open_by_label['UT'].pop(0)
         else:
             for label, indices in open_by_label.items():
-                if indices:
+                if label != 'Def' and indices:
                     target = indices.pop(0)
                     break
 
@@ -1131,10 +1157,8 @@ def assign_picks_to_slots_bk(roster_slots, team_picks):
 
 def assign_picks_to_slots_fb(roster_slots, team_picks):
     """
-    Same pattern as assign_picks_to_slots_bb. QB/TE/WR/Def/Special are each
-    their own strict bucket. HB and FB share a pool -- a pick overflows into
-    the other's open slot before falling back to any open slot of any kind,
-    so a pick is never dropped visually.
+    QB/TE/WR/Def/Special are each their own strict bucket. HB and FB share a pool.
+    A pick that doesn't fit its own slot goes to a FLEX slot (takes anyone), then to any open slot.
     """
     assigned = [None] * len(roster_slots)
     open_by_label = {}
@@ -1149,6 +1173,8 @@ def assign_picks_to_slots_fb(roster_slots, team_picks):
             target = open_by_label[slot_label].pop(0)
         elif slot_label in HB_FB_OVERFLOW and open_by_label.get(HB_FB_OVERFLOW[slot_label]):
             target = open_by_label[HB_FB_OVERFLOW[slot_label]].pop(0)
+        elif open_by_label.get('FLEX'):
+            target = open_by_label['FLEX'].pop(0)
         else:
             for label, indices in open_by_label.items():
                 if indices:

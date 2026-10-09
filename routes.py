@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, abort, current_app, redirect, url_for, send_file
-from .ai import ai_select_bb, ai_select_bk, ai_select_fb, parse_salary, to_float
+from .ai import ai_select_bb, ai_select_bk, ai_select_fb, parse_salary, to_float, open_position_lottery_bk, make_cap_checker
 from .services import (
     load_baseball,
     load_basketball,
@@ -44,7 +44,8 @@ from .services import (
     assign_picks_to_slots_bk,
     assign_picks_to_slots_fb,
     delete_saved_draft,
-    TWO_WAY_BB
+    TWO_WAY_BB,
+    TWO_WAY_FB
 )
 from datetime import datetime
 from .exports import (
@@ -404,7 +405,7 @@ def bk_load():
             ai_set.append(team.get("team_name"))
 
     # basketball roster slots
-    roster_slots = ["C", "F", "F", "G", "G", "UT", "UT", "UT", "UT", "UT"]
+    roster_slots = list(BK_ROSTER_SLOTS)
 
     all_teams = [
         {"team_id": t["team_id"], "name": t["team_name"], "is_human": t["type"] == "human"}
@@ -530,7 +531,7 @@ def bk_draft():
         people = [p for p in all_players if str(p.get("id")) in id_set]
 
     # roster slot labels
-    roster_slots = ["C", "F", "F", "G", "G", "UT", "UT", "UT", "UT", "UT"]
+    roster_slots = list(BK_ROSTER_SLOTS)
 
     output_path = Path("drafts") / f"{draftname}_bk.json"
     meta_path   = Path("drafts") / f"{draftname}_bk_meta.json"
@@ -761,10 +762,14 @@ def fb_load():
     for entry in log:
         rosters.setdefault(entry['team_id'], []).append(entry)
 
-    roster_assignments = {
-        t["team_id"]: assign_picks_to_slots_fb(roster_slots, rosters.get(t["team_id"], []))
-        for t in meta["teams"]
-    }
+    team_slots = {}
+    roster_assignments = {}
+    for t in meta["teams"]:
+        picks = rosters.get(t["team_id"], [])
+        n_bonus = sum(1 for e in picks if e.get('is_bonus'))
+        slots = roster_slots + ["FLEX"] * n_bonus
+        team_slots[t["team_id"]] = slots
+        roster_assignments[t["team_id"]] = assign_picks_to_slots_fb(slots, picks)
 
     # current picking team
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
@@ -778,6 +783,8 @@ def fb_load():
         logo_rows=logo_rows,
         roster_slots=roster_slots,
         roster_assignments=roster_assignments,
+        team_slots=team_slots,
+        current_pick=meta['current_pick'],
         num_teams=meta.get("num_teams", 0),
         human_teams=human_teams,
         ai_set=ai_set,
@@ -842,10 +849,14 @@ def fb_draft():
     for entry in draft_log:
         rosters.setdefault(entry['team_id'], []).append(entry)
 
-    roster_assignments = {
-        t["team_id"]: assign_picks_to_slots_fb(roster_slots, rosters.get(t["team_id"], []))
-        for t in meta["teams"]
-    }
+    team_slots = {}
+    roster_assignments = {}
+    for t in meta["teams"]:
+        picks = rosters.get(t["team_id"], [])
+        n_bonus = sum(1 for e in picks if e.get('is_bonus'))
+        slots = roster_slots + ["FLEX"] * n_bonus
+        team_slots[t["team_id"]] = slots
+        roster_assignments[t["team_id"]] = assign_picks_to_slots_fb(slots, picks)
 
     # current picking team
     current_team_obj  = get_team_by_id(meta, meta.get('current_team_id', 1))
@@ -858,6 +869,8 @@ def fb_draft():
         logo_rows=logo_rows,
         roster_slots=roster_slots,
         roster_assignments=roster_assignments,
+        team_slots=team_slots,
+        current_pick=meta['current_pick'],
         pool=pool,
         cap=cap,
         draftname=draftname,
@@ -1034,7 +1047,7 @@ def run_ai_picks_bb(draftname):
 
 def make_ai_pick_bk(draftname):
     """Basketball equivalent of make_ai_pick_bb."""
-    roster_slots = ["C", "F", "F", "G", "G", "UT", "UT", "UT", "UT", "UT"]
+    roster_slots = list(BK_ROSTER_SLOTS)
 
     draft_path = Path("drafts") / f"{draftname}_bk.json"
     log_path   = Path("drafts") / f"{draftname}_bk_log.json"
@@ -1067,13 +1080,20 @@ def make_ai_pick_bk(draftname):
         player_id = None
 
     if player_id is None:
-        print(f">>> BK AI fallback: {team['team_name']} at pick {meta['current_pick']}; "
-              f"Salary sample: {players[0].get('Salary')!r}")
-        undrafted = [p for p in players if p.get('team_id', 0) == 0]
+        print(f">>> BK AI fallback: {team['team_name']} at pick {meta['current_pick']}")
+        # the fallback respects the open slot: a defense if only the Def slot is left, otherwise a player
+        open_labels = open_position_lottery_bk(roster_slots, team_picks)
+        need_def = bool(open_labels) and all(label == 'Def' for label in open_labels)
+        undrafted = [
+            p for p in players
+            if p.get('team_id', 0) == 0 and (p.get('kind') == 'defense') == need_def
+        ]
         if not undrafted:
             return None
-        # best scorer first, random among ties (never just alphabetical)
-        undrafted.sort(key=lambda p: (-to_float(p.get('ptspgm')), random.random()))
+        if need_def:
+            undrafted.sort(key=lambda p: (-parse_salary(p.get('Salary')), random.random()))
+        else:
+            undrafted.sort(key=lambda p: (-to_float(p.get('ptspgm')), random.random()))
         player_id = undrafted[0].get('id')
 
     player = next((p for p in players if str(p.get('id')) == str(player_id)), None)
@@ -1093,7 +1113,7 @@ def make_ai_pick_bk(draftname):
         "pick":            pick_num,
         "team_id":         team_id,
         "team":            team['team_name'],
-        "player":          f"{player.get('FirstName')} {player.get('LastName')}",
+        "player":          player.get('name') or f"{player.get('FirstName', '')} {player.get('LastName', '')}".strip(),
         "pos":             player.get('short_pos') or player.get('Pos', ''),
         "id":              str(player_id),
         "next_team":       next_team['team_name'] if next_team else '',
@@ -1159,11 +1179,16 @@ def make_ai_pick_fb(draftname):
         log = json.load(f)
 
     team_picks         = [e for e in log if e['team_id'] == team_id]
+    team_slots         = roster_slots + ["FLEX"] * sum(1 for e in team_picks if e.get('is_bonus'))
     round_num          = (meta['current_pick'] - 1) // meta['num_teams'] + 1
     cap                = meta.get('cap')
     salary_cap_enabled = parse_salary(cap) > 0
 
-    player_id = ai_select_fb(team, roster_slots, team_picks, players, round_num, cap, salary_cap_enabled)
+    try:
+        player_id = ai_select_fb(team, team_slots, team_picks, players, round_num, cap, salary_cap_enabled)
+    except Exception:
+        traceback.print_exc()
+        player_id = None
 
     if player_id is None:
         print(f">>> FB fallback (cheapest undrafted) for {team['team_name']} at pick {meta['current_pick']}")
@@ -1179,6 +1204,10 @@ def make_ai_pick_fb(draftname):
 
     pick_num = meta['current_pick']
     player['team_id'] = team_id
+
+    # two-way players bring their other record along
+    bonus = maybe_add_twin_fb(player, players, team, pick_num)
+
     with open(draft_path, "w", encoding="utf-8") as f:
         json.dump(players, f, indent=2)
 
@@ -1201,9 +1230,11 @@ def make_ai_pick_fb(draftname):
         "auto_picked":     team['type'] == 'human',
     }
     append_to_log(log_path, entry)
+    if bonus:
+        append_to_log(log_path, bonus)
     save_football_meta(draftname, meta)
 
-    return entry
+    return {**entry, 'next_pick': meta['current_pick'], 'bonus': bonus}
 
 
 def run_ai_picks_fb(draftname):
@@ -1232,7 +1263,15 @@ def run_ai_picks_fb(draftname):
     finally:
         AI_LOOPS.discard(key)
 
-ROSTER_SIZE = {'bb': 25, 'bk': 10, 'fb': 13}
+ROSTER_SIZE = {'bb': 25, 'bk': 12, 'fb': 13}
+BK_ROSTER_SLOTS = ["C", "F", "F", "G", "G", "UT", "UT", "UT", "UT", "UT", "UT", "Def"]
+BB_ROSTER_SLOTS = ["C", "C", "1B", "2B", "SS", "3B", "LF", "CF", "RF",
+                   "UT", "UT", "UT", "UT", "UT", "UT",
+                   "S", "S", "S", "S", "S",
+                   "R", "R", "R", "R", "R"]
+FB_ROSTER_SLOTS = ["QB", "QB", "HB", "HB", "FB", "TE", "TE",
+                   "WR", "WR", "WR", "WR", "Def", "Special"]
+BASE_SLOTS = {'bb': BB_ROSTER_SLOTS, 'bk': BK_ROSTER_SLOTS, 'fb': FB_ROSTER_SLOTS}
 
 RUNNING_DRAFTS = set()   # {(draftname, sport), ...}  drafts that are currently live
 AI_LOOPS       = set()   # {(draftname, sport), ...}  prevents duplicate AI loops
@@ -1301,6 +1340,57 @@ def log_export(sport, draftname):
         mimetype="text/plain",
     )
 
+def maybe_add_twin_fb(player, players, team, pick_num):
+    """Football two-way players (QB/WR, HB/TE, HB/WR): drafting one record drafts the other too.
+    Returns the bonus log entry (not yet written to the log), or None."""
+    twin_id = TWO_WAY_FB.get(str(player.get('id')))
+    if not twin_id:
+        return None
+
+    twin = next((p for p in players if str(p.get('id')) == twin_id), None)
+    if not twin or twin.get('team_id', 0) != 0:
+        return None            # twin isn't in this pool, or is already taken
+
+    twin['team_id'] = team['team_id']
+    return {
+        "pick":     pick_num,  # same pick number as the main pick
+        "team_id":  team['team_id'],
+        "team":     team['team_name'],
+        "player":   f"{twin.get('FirstName', '')} {twin.get('LastName', '')}".strip(),
+        "pos":      twin.get('short_pos') or twin.get('Positions', ''),
+        "id":       str(twin_id),
+        "is_bonus": True,
+    }
+
+def _money(v):
+    return f"${abs(v):,.0f}"
+
+
+def human_cap_warning(sport, cap, team_id, log_path, players, player):
+    """Text of a salary-cap warning for this human pick, or None if the pick is fine."""
+    if parse_salary(cap) <= 0:
+        return None
+
+    with open(log_path, "r", encoding="utf-8") as f:
+        team_picks = [e for e in json.load(f) if e['team_id'] == team_id]
+    slots = list(BASE_SLOTS[sport]) + ["FLEX"] * sum(1 for e in team_picks if e.get('is_bonus'))
+
+    checker = make_cap_checker(sport, slots, team_picks, players, team_id, cap, safety=1.0)
+    w = checker.warning(player)
+    if not w:
+        return None
+
+    name = player.get('name') or f"{player.get('FirstName', '')} {player.get('LastName', '')}".strip()
+    if w['level'] == 'over':
+        return f"Drafting {name} would put you {_money(w['left'])} OVER the salary cap."
+    if w['level'] == 'short':
+        return (f"After {name} you'd have {_money(w['left'])} left for your last {w['slots']} slot(s), "
+                f"but the cheapest players still available to fill them add up to {_money(w['reserve'])}. "
+                f"You wouldn't be able to stay under the cap.")
+    return (f"Careful: after {name} you'd have {_money(w['left'])} left for your last {w['slots']} slot(s), "
+            f"and the cheapest players still available cost {_money(w['reserve'])}. "
+            f"That leaves almost no room.")
+
 # ------ SOCKET IO CALLS -------
 
 @socketio.on('make_pick')
@@ -1360,13 +1450,34 @@ def handle_make_pick(data):
         emit('pick_error', {'message': 'Player already drafted'})
         return
 
+    # basketball roster rules: one defense, and the other 11 slots are for players
+    if sport == 'bk':
+        with open(log_path, "r", encoding="utf-8") as f:
+            mine = [e for e in json.load(f) if e['team_id'] == team_id]
+        has_def = any(e.get('pos') == 'DEF' for e in mine)
+        if player.get('kind') == 'defense' and has_def:
+            emit('pick_error', {'message': 'Your roster already has a defense.'})
+            return
+        if player.get('kind') != 'defense' and len(mine) - (1 if has_def else 0) >= len(BK_ROSTER_SLOTS) - 1:
+            emit('pick_error', {'message': 'Your player slots are full. Only the defense slot is left.'})
+            return
+
+    # salary cap: warn (once) if this pick could leave the team unable to finish its roster under the cap
+    if not data.get('confirmed'):
+        warning = human_cap_warning(sport, meta.get('cap'), team_id, log_path, players, player)
+        if warning:
+            emit('cap_warning', {'player_id': player_id, 'message': warning})
+            return
+
     # assign player to team
     player['team_id'] = team_id
 
-    # NEW: baseball two-way players bring their twin along
+    # two-way players bring their other record along
     bonus = None
     if sport == 'bb':
         bonus = maybe_add_twin_bb(player, players, team, pick_num, log_path)
+    elif sport == 'fb':
+        bonus = maybe_add_twin_fb(player, players, team, pick_num)
 
     with open(draft_path, "w", encoding="utf-8") as f:
         json.dump(players, f, indent=2)
@@ -1376,7 +1487,7 @@ def handle_make_pick(data):
     meta['current_team_id'] = get_next_team_id(meta)
     next_team = get_team_by_id(meta, meta['current_team_id'])
 
-    # football OL/DL and Special use 'name' instead of FirstName/LastName
+    # football lines / special teams and basketball defenses use 'name' instead of FirstName/LastName
     player_name = player.get('name') or f"{player.get('FirstName', '')} {player.get('LastName', '')}".strip()
 
     entry = {
@@ -1390,7 +1501,7 @@ def handle_make_pick(data):
         "next_team_type": next_team['type']
     }
     append_to_log(log_path, entry)
-    if bonus:                                  # NEW
+    if bonus:
         append_to_log(log_path, bonus)
 
     # save meta
@@ -1401,7 +1512,7 @@ def handle_make_pick(data):
     elif sport == 'fb':
         save_football_meta(draftname, meta)
 
-    # NEW: the live event also carries the real next pick number and the bonus entry
+    # the live event also carries the real next pick number and the bonus entry
     payload = {**entry, 'next_pick': meta['current_pick'], 'bonus': bonus}
     socketio.emit('pick_made', payload)
 
