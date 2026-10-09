@@ -15,7 +15,7 @@ const socket = io();
 const currentDraftname = "{{ draftname }}";
 const currentSport = "{{ sport }}";
 const POS_TO_SLOT = {
-    'C': 'C', 'F': 'F', 'G': 'G'
+    'C': 'C', 'F': 'F', 'G': 'G', 'DEF': 'Def'
 };
 let selectedPlayerId = null;
 let sortDir = {};
@@ -136,6 +136,17 @@ socket.on('pick_error', (data) => {
     alert(data.message);
 });
 
+socket.on('cap_warning', (data) => {
+    if (confirm(data.message + '\n\nDraft this player anyway?')) {
+        socket.emit('make_pick', {
+            draftname: currentDraftname,
+            player_id: data.player_id,
+            sport:     currentSport,
+            confirmed: true
+        });
+    }
+});
+
 socket.on('full_sync', (data) => {
     console.log('Full sync received:', data);
     rebuildSpend(data.log);
@@ -207,6 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
     rebuildSpend(INITIAL_LOG);
     updateSalaryLine();
     // show first team roster on load
+    document.querySelectorAll('#playerBody tr[data-pos="DEF"]').forEach(r => r.style.display = 'none');
     const first = document.querySelector('.roster-team');
     if (first) first.style.display = 'block';
     setTimeout(() => {
@@ -270,8 +282,12 @@ function sortTable(col) {
 function filterPos(btn, pos) {
     document.querySelectorAll('.btn-pos').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    const isDef = (pos === 'DEF');
+    document.getElementById('player-head').style.display = isDef ? 'none' : '';
+    document.getElementById('def-head').style.display    = isDef ? '' : 'none';
     document.querySelectorAll('#playerBody tr').forEach(row => {
-        row.style.display = (pos === 'ALL' || row.dataset.pos === pos) ? '' : 'none';
+        const rowPos = row.dataset.pos;
+        row.style.display = (pos === 'ALL' ? rowPos !== 'DEF' : rowPos === pos) ? '' : 'none';
     });
 }
 
@@ -564,6 +580,8 @@ function updateSalaryLine(teamName) {
     <a href="{{ url_for('main.start_basketball') }}"> Home</a>
     <a href="{{ url_for('main.bk_export', draftname=draftname) }}" style="margin-left:16px">Export Excel</a>
     <a href="{{ url_for('main.log_export', sport=sport, draftname=draftname) }}" style="margin-left:16px">Export Log</a>
+    <a href="{{ url_for('main.bk_report', draftname=draftname) }}" style="margin-left:16px">Export Report</a>
+    <a href="{{ url_for('main.bk_report', draftname=draftname, view=1) }}" target="_blank" style="margin-left:16px">View Report</a>
 </div>
 
 <div class="logo-strip" id="logoStrip"></div>
@@ -601,6 +619,7 @@ function updateSalaryLine(teamName) {
             <button class="btn-pos" onclick="filterPos(this,'C')">C</button>
             <button class="btn-pos" onclick="filterPos(this,'F')">F</button>
             <button class="btn-pos" onclick="filterPos(this,'G')">G</button>
+            <button class="btn-pos" onclick="filterPos(this,'DEF')">DEF</button>
         </div>
         <select id="statView" onchange="switchStatView(this.value)" class="roster-select" style="width:140px;">
             <option value="real">Real Stats</option>
@@ -611,7 +630,7 @@ function updateSalaryLine(teamName) {
     <!-- Sticky header table -->
     <table class="player-table">
        <thead>
-            <tr>
+            <tr id="player-head">
                 <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
                 <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
                 <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
@@ -626,6 +645,21 @@ function updateSalaryLine(teamName) {
                 <th class="stat-strat" style="display:none" onclick="sortTable(6)">Dsteal <span class="sort-icon">↕</span></th>
                 <th class="stat-strat" style="display:none" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>
             </tr>
+            <tr id="def-head" style="display:none">
+                <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
+                <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
+                <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
+                <th class="stat-real" onclick="sortTable(3)">OMade <span class="sort-icon">↕</span></th>
+                <th class="stat-real" onclick="sortTable(4)">PMade <span class="sort-icon">↕</span></th>
+                <th class="stat-real" onclick="sortTable(5)">IMade <span class="sort-icon">↕</span></th>
+                <th class="stat-real" onclick="sortTable(6)">FMade <span class="sort-icon">↕</span></th>
+                <th class="stat-real" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>
+                <th class="stat-strat" style="display:none" onclick="sortTable(3)">OMade <span class="sort-icon">↕</span></th>
+                <th class="stat-strat" style="display:none" onclick="sortTable(4)">PMade <span class="sort-icon">↕</span></th>
+                <th class="stat-strat" style="display:none" onclick="sortTable(5)">IMade <span class="sort-icon">↕</span></th>
+                <th class="stat-strat" style="display:none" onclick="sortTable(6)">FMade <span class="sort-icon">↕</span></th>
+                <th class="stat-strat" style="display:none" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>
+            </tr>
         </thead>
     </table>
 
@@ -634,6 +668,30 @@ function updateSalaryLine(teamName) {
         <table class="player-table">
             <tbody id="playerBody">
                 {% for p in players %}
+                {% if p.kind == 'defense' %}
+                <tr data-pos="DEF" data-id="{{ p.id }}" data-sal="{{ p.Salary }}" style="display:none">
+                    <td class="pos-badge">DEF</td>
+                    <td>{{ p.name }}</td>
+                    <td class="team-cell">
+                      {% if p.Team_Logo %}
+                      <img class="team-logo" src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/basketball/{{ p.Team_Logo }}.png"
+                           alt="{{ p.Team_Logo }}" title="{{ p.Team_Logo }}"
+                           onerror="this.style.display='none'; this.nextElementSibling.classList.remove('visually-hidden');">
+                      <span class="visually-hidden">{{ p.Team_Logo }}</span>
+                      {% endif %}
+                    </td>
+                    <td class="stat-real">{{ p.Omade if p.Omade is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.Pmade if p.Pmade is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.Imade if p.Imade is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.Fmade if p.Fmade is defined else '—' }}</td>
+                    <td class="stat-real">{{ p.Salary if p.Salary is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.Omade if p.Omade is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.Pmade if p.Pmade is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.Imade if p.Imade is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.Fmade if p.Fmade is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.Salary if p.Salary is defined else '—' }}</td>
+                </tr>
+                {% else %}
                 <tr data-pos="{{ p.Pos }}" data-id="{{ p.id }}" data-sal="{{ p.Salary }}">
                     <td class="pos-badge">{{ p.Pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
@@ -657,6 +715,7 @@ function updateSalaryLine(teamName) {
                     <td class="stat-strat" style="display:none">{{ p.Dsteal if p.Dsteal is defined else '—' }}</td>
                     <td class="stat-strat" style="display:none">{{ p.Salary if p.Salary is defined else '—' }}</td>
                 </tr>
+                {% endif %}
                 {% endfor %}
             </tbody>
         </table>

@@ -112,6 +112,17 @@ socket.on('pick_error', (data) => {
 });
 
 
+socket.on('cap_warning', (data) => {
+    if (confirm(data.message + '\n\nDraft this player anyway?')) {
+        socket.emit('make_pick', {
+            draftname: currentDraftname,
+            player_id: data.player_id,
+            sport:     currentSport,
+            confirmed: true
+        });
+    }
+});
+
 socket.on('full_sync', (data) => {
     console.log('Full sync received:', data);
     rebuildSpend(data.log);
