@@ -1,25 +1,30 @@
 {% extends "base.html" %}
 {% block title %}Sports Draft{% endblock %}
-
-
-{% block body %}
-<h1>
-<a class="link-offset-2 link-offset-3-hover link-underline link-underline-opacity-50 link-underline-opacity-75-hover link-dark" href="{{ url_for('main.start_baseball') }}"><img src="{{ url_for('static', filename='baseball.jpg') }}" height=300 border=none>
-</a>
-</h1>
-<p>
-  <h1>
-<a class="link-offset-2 link-offset-3-hover link-underline link-underline-opacity-50 link-underline-opacity-75-hover link-dark" href="{{ url_for('main.start_basketball') }}"><img src="{{ url_for('static', filename='basketball.jpg') }}" height=300 border=none>
-</a>
-</h1>
-<p>
-  <h1>
-<a class="link-offset-2 link-offset-3-hover link-underline link-underline-opacity-50 link-underline-opacity-75-hover link-dark" href="{{ url_for('main.start_football') }}"><img src="{{ url_for('static', filename='football.jpg') }}" height=300 border=none>
-</a>
-</h1>
-<p>
-<hr>
+{% block css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('static', filename='confirm.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='setup.css') }}">
+  <style>
+    body { background: radial-gradient(circle at 50% 0%, #1e293b 0%, #0b1220 70%) fixed; }
+    body::before { display: none; }
+  </style>
 {% endblock %}
 
+{% block body %}
+<div class="cf-wrap">
+  <h1 class="cf-title" style="text-align:center;font-size:2.4rem;margin-top:18px">Sports Draft</h1>
+  <p class="cf-sub" style="text-align:center">Pick a sport to start a new draft or resume one.</p>
 
-
+  <div class="su-sports">
+    <a class="su-sport" href="{{ url_for('main.start_baseball') }}">
+      <img src="{{ url_for('static', filename='baseball.jpg') }}" alt=""><span>Baseball</span>
+    </a>
+    <a class="su-sport" href="{{ url_for('main.start_basketball') }}">
+      <img src="{{ url_for('static', filename='basketball.jpg') }}" alt=""><span>Basketball</span>
+    </a>
+    <a class="su-sport" href="{{ url_for('main.start_football') }}">
+      <img src="{{ url_for('static', filename='football.jpg') }}" alt=""><span>Football</span>
+    </a>
+  </div>
+</div>
+{% endblock %}
