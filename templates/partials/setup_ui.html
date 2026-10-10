@@ -1,0 +1,113 @@
+{# Shared UI for the three sport setup pages. Expects `cfg` (set by the sport's template) and saved_drafts. #}
+<div class="cf-wrap">
+
+  <a class="cf-back" href="{{ cfg.home }}">&larr; All sports</a>
+  <h1 class="cf-title">{{ cfg.sport }} Draft</h1>
+  <p class="cf-sub">Set up a new draft, or pick up one you've already started.</p>
+
+  <div class="su-grid">
+
+    {# ================= NEW DRAFT ================= #}
+    <form id="newDraft" class="cf-card" action="{{ cfg.confirm }}" method="POST">
+
+      <section class="su-step">
+        <h2 class="su-h"><span class="su-num">1</span>Teams</h2>
+
+        <div class="su-label">How many teams are in the draft?</div>
+        <div class="su-seg">
+          {% for n in [4, 8, 12, 16, 24, 32] %}
+            <input type="radio" name="num_teams" id="nt{{ n }}" value="{{ n }}" {{ 'checked' if n == 4 }}>
+            <label for="nt{{ n }}">{{ n }}</label>
+          {% endfor %}
+        </div>
+
+        <div class="su-label su-labelrow">
+          <span>Which teams are yours? <span id="teamCount" class="su-count">0 / 4</span></span>
+          <button type="button" id="clearTeams" class="su-link">Clear</button>
+        </div>
+        <div id="logos" class="su-logos" hx-get="{{ cfg.logos }}" hx-trigger="load">
+          <span class="cf-muted">Loading teams...</span>
+        </div>
+      </section>
+
+      <section class="su-step">
+        <h2 class="su-h"><span class="su-num">2</span>Player pool</h2>
+        <div class="su-choices">
+          {% for value, title, text in [
+            ('full',   'Complete', 'Every player in the database. The biggest variety.'),
+            ('random', 'Random',   'A random slice sized to your draft. Different every time.'),
+            ('custom', 'Custom',   'Hand-pick exactly who is in the pool.')
+          ] %}
+            <div class="su-choice">
+              <input type="radio" name="pool" id="pool-{{ value }}" value="{{ value }}" {{ 'checked' if value == 'full' }}>
+              <label for="pool-{{ value }}"><b>{{ title }}</b><small>{{ text }}</small></label>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="su-step">
+        <h2 class="su-h"><span class="su-num">3</span>Salary cap</h2>
+        <div class="su-seg">
+          <input type="radio" name="cap" id="cap-no" value="No" checked>
+          <label for="cap-no">No cap</label>
+          <input type="radio" name="cap" id="cap-yes" value="Yes">
+          <label for="cap-yes">Use a cap</label>
+        </div>
+
+        <div id="capWrap" hidden>
+          <div class="su-money">
+            <span>$</span>
+            <input type="number" name="cap_amount" id="cap_amount" class="cf-input" min="1" step="1" placeholder="e.g. 100000000">
+          </div>
+          {% if cfg.cap_presets %}
+            <div class="su-presets">
+              {% for amount in cfg.cap_presets %}
+                <button type="button" data-amount="{{ amount }}">${{ '{:,.0f}'.format(amount) }}</button>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      </section>
+
+      <div class="su-bar">
+        <span id="summary" class="su-summary su-dim">Pick at least one team to continue</span>
+        <button id="goBtn" class="cf-btn cf-btn-primary" type="submit" disabled>Continue</button>
+      </div>
+    </form>
+
+    {# ================= SAVED DRAFTS ================= #}
+    <aside class="cf-card">
+      <div class="cf-row">
+        <h2 class="cf-h2">Saved drafts</h2>
+        <span class="cf-muted">{{ saved_drafts|length }}</span>
+      </div>
+
+      {% if saved_drafts|length > 6 %}
+        <input id="draftFilter" class="cf-input cf-input-sm" type="search" placeholder="Search drafts...">
+      {% endif %}
+
+      {% if saved_drafts %}
+        <ul class="su-drafts">
+          {% for filename in saved_drafts %}
+            {% set dname = filename[:-8] %}
+            <li class="su-draft" data-name="{{ dname|lower }}">
+              <span class="nm" title="{{ dname }}">{{ dname }}</span>
+              <form action="{{ cfg.load }}" method="POST">
+                <input type="hidden" name="saved_draft_file" value="{{ filename }}">
+                <button class="cf-btn cf-btn-primary su-sm" type="submit">Open</button>
+              </form>
+              <form class="su-del" action="{{ cfg.delete }}" method="POST" data-name="{{ dname }}">
+                <input type="hidden" name="delete_draft_file" value="{{ filename }}">
+                <button class="cf-btn cf-btn-ghost su-sm su-danger" type="submit">Delete</button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="cf-muted">No saved drafts yet. Once you start one, it will show up here.</p>
+      {% endif %}
+    </aside>
+
+  </div>
+</div>

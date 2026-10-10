@@ -1,0 +1,154 @@
+{# Shared UI for the three confirm pages. Expects `cfg` (set by the sport's template) plus the usual
+   route variables: mode, num_teams, human_teams, ai_set, pool, cap, players, saved_names #}
+{% set pool_label = {'full': 'Complete', 'random': 'Random', 'custom': 'Custom'}.get(pool, pool) %}
+
+<div class="cf-wrap">
+
+  <a class="cf-back" href="{{ cfg.home }}">&larr; Back to {{ cfg.sport }}</a>
+
+  {% if mode == 'select_players' %}
+    <h1 class="cf-title">Build your player pool</h1>
+    <p class="cf-sub">Choose exactly the number shown for each group. <b>Random</b> fills a group for you.</p>
+  {% else %}
+    <h1 class="cf-title">Name your {{ cfg.sport|lower }} draft</h1>
+    <p class="cf-sub">Check the setup below, give the draft a name, and start.</p>
+  {% endif %}
+
+  <div class="cf-chips">
+    <span class="cf-chip"><b>{{ num_teams }}</b> teams</span>
+    <span class="cf-chip">Pool: <b>{{ pool_label }}</b></span>
+    <span class="cf-chip">Salary cap: <b>{{ '${:,.0f}'.format(cap|float) if cap else 'None' }}</b></span>
+  </div>
+
+  {# ================= FINAL CONFIRM: name first, details below ================= #}
+  {% if mode == 'final_confirm' %}
+
+    <form id="startForm" class="cf-card cf-namecard" action="{{ cfg.draft }}" method="POST">
+      <input type="hidden" name="num_teams" value="{{ num_teams }}">
+      <input type="hidden" name="pool" value="{{ pool }}">
+      <input type="hidden" name="cap" value="{{ cap }}">
+      {% for team in human_teams %}<input type="hidden" name="human_teams" value="{{ team }}">{% endfor %}
+      {% for team in ai_set %}<input type="hidden" name="ai_set" value="{{ team }}">{% endfor %}
+      {% if pool != 'full' %}
+        {% for p in players %}<input type="hidden" name="selected_player_ids" value="{{ p.get('id') or p.get('ID') }}">{% endfor %}
+      {% endif %}
+
+      <div>
+        <label class="cf-label" for="draftname">Name your draft</label>
+        <input id="draftname" name="draftname" class="cf-input" type="text" maxlength="40" autocomplete="off"
+               autofocus required placeholder="e.g. Fall League 2026"
+               data-existing='{{ saved_names|default([])|tojson }}'>
+        <div id="nameWarn" class="cf-warn" hidden>A draft with this name already exists. Starting will reopen it instead of creating a new one.</div>
+      </div>
+
+      <div class="cf-actions">
+        <a class="cf-btn cf-btn-ghost" href="{{ cfg.home }}">Cancel</a>
+        <button id="startBtn" class="cf-btn cf-btn-primary" type="submit" disabled>Start draft</button>
+      </div>
+    </form>
+
+  {% endif %}
+
+  {# ================= TEAMS ================= #}
+  <details class="cf-card cf-details" {% if mode != 'select_players' %}open{% endif %}>
+    <summary>Teams ({{ human_teams|length + ai_set|length }})</summary>
+    {% if human_teams %}
+      <p class="cf-subhead">Human teams</p>
+      <div class="cf-teams">
+        {% for name in human_teams %}
+          <div class="cf-team human">
+            <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/{{ cfg.logo_dir }}/{{ name }}_{{ cfg.logo_code }}.png" alt="{{ name }}">
+            <span>{{ name }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    <p class="cf-subhead">AI teams</p>
+    <div class="cf-teams">
+      {% for name in ai_set %}
+        <div class="cf-team ai">
+          <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/{{ cfg.logo_dir }}/{{ name }}_{{ cfg.logo_code }}.png" alt="{{ name }}">
+          <span>{{ name }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  </details>
+
+  {# ================= FINAL CONFIRM: pool summary ================= #}
+  {% if mode == 'final_confirm' %}
+
+    <div class="cf-card">
+      <div class="cf-row">
+        <h2 class="cf-h2">Player pool</h2>
+        <span class="cf-muted">{{ players|length }} players</span>
+      </div>
+      <div>
+        {% for g in cfg.groups %}
+          <span class="cf-chip">{{ g.title }} <b>{{ players|selectattr(cfg.pos_field, 'in', g.match)|list|length }}</b></span>
+        {% endfor %}
+      </div>
+      <details class="cf-details" style="margin-top:8px">
+        <summary>Browse all players</summary>
+        <input id="poolSearch" class="cf-input cf-input-sm" type="search" placeholder="Search players...">
+        <ul id="poolList" class="cf-list">
+          {% for p in players %}
+            {% set pname = p.get('name') or ((p.get('FirstName', '') ~ ' ' ~ p.get('LastName', ''))|trim) %}
+            <li data-name="{{ pname|lower }}"><b>{{ p.get(cfg.pos_field, '') }}</b> {{ pname }}</li>
+          {% endfor %}
+        </ul>
+      </details>
+    </div>
+
+  {# ================= CUSTOM POOL PICKER ================= #}
+  {% elif mode == 'select_players' %}
+
+    <form id="poolForm" action="{{ cfg.confirm }}" method="POST">
+      <input type="hidden" name="num_teams" value="{{ num_teams }}">
+      <input type="hidden" name="pool" value="{{ pool }}">
+      <input type="hidden" name="cap" value="{{ cap }}">
+      {% for team in human_teams %}<input type="hidden" name="human_teams" value="{{ team }}">{% endfor %}
+      {% for team in ai_set %}<input type="hidden" name="ai_set" value="{{ team }}">{% endfor %}
+
+      <div class="cf-card cf-sticky">
+        <div class="cf-pills">
+          {% for g in cfg.groups %}
+            <span class="cf-pill" data-code="{{ g.code }}" data-state="empty">{{ g.title }} <b>0/{{ num_teams * g.mult }}</b></span>
+          {% endfor %}
+        </div>
+        <div class="cf-actions">
+          <button id="randomAll" class="cf-btn cf-btn-ghost" type="button">Random fill all</button>
+          <button id="poolSubmit" class="cf-btn cf-btn-primary" type="submit" disabled>Continue</button>
+        </div>
+      </div>
+
+      <div class="cf-groups">
+        {% for g in cfg.groups %}
+          {% set need = num_teams * g.mult %}
+          <section class="cf-group" data-code="{{ g.code }}" data-need="{{ need }}" data-state="empty">
+            <header>
+              <h3>{{ g.title }}</h3>
+              <span class="cf-count">0 / {{ need }}</span>
+            </header>
+            <div class="cf-gbtns">
+              <button type="button" data-act="random">Random {{ need }}</button>
+              <button type="button" data-act="all">All</button>
+              <button type="button" data-act="none">Clear</button>
+            </div>
+            <input class="cf-gsearch" type="search" placeholder="Filter {{ g.title|lower }}...">
+            <div class="cf-glist">
+              {% for p in players|selectattr(cfg.pos_field, 'in', g.match) %}
+                {% set pname = p.get('name') or ((p.get('FirstName', '') ~ ' ' ~ p.get('LastName', ''))|trim) %}
+                <label data-name="{{ pname|lower }}">
+                  <input type="checkbox" name="selected_player_ids" value="{{ p.get('id') or p.get('ID') }}">
+                  <span>{{ pname }}</span>
+                </label>
+              {% endfor %}
+            </div>
+          </section>
+        {% endfor %}
+      </div>
+    </form>
+
+  {% endif %}
+
+</div>
