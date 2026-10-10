@@ -222,7 +222,8 @@ def bb_confirm():
         draftname=draftname,
         cap=cap,
         players=people,
-        mode=mode
+        mode=mode,
+        saved_names=[n[:-len("_bb.json")] for n in get_saved_baseball_drafts()],
     )
 
 @main.route("/bb_draft", methods=["POST"])
@@ -508,7 +509,8 @@ def bk_confirm():
         draftname=draftname,
         cap=cap,
         players=people,
-        mode=mode
+        mode=mode,
+        saved_names=[n[:-len("_bk.json")] for n in get_saved_basketball_drafts()],
     )
 
 
@@ -717,7 +719,8 @@ def fb_confirm():
         draftname=draftname,
         cap=cap,
         players=people,
-        mode=mode
+        mode=mode,
+        saved_names=[n[:-len("_fb.json")] for n in get_saved_football_drafts()],
     )
 
 @main.route("/fb_load", methods=["POST"])
