@@ -1,0 +1,101 @@
+/* Shared look for the baseball / basketball / football confirm pages */
+body::before{content:"";position:fixed;inset:0;background:rgba(5,8,16,.55);z-index:-1}
+
+.cf-wrap{--gold:#c9a84c;--ink:#f1f5f9;--muted:#cbd5e1;--card:rgba(14,18,30,.84);--line:rgba(255,255,255,.14);
+  max-width:1180px;margin:0 auto;padding:22px 16px 70px;color:var(--ink);
+  font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.cf-wrap [hidden]{display:none!important}
+
+.cf-back{display:inline-block;color:var(--muted);text-decoration:none;margin-bottom:10px}
+.cf-back:hover{color:#fff}
+.cf-title{margin:0 0 4px;font-size:1.9rem;font-weight:800;letter-spacing:-.01em;color:#fff}
+.cf-sub{margin:0 0 14px;color:var(--muted)}
+
+.cf-chips{margin-bottom:14px}
+.cf-chip{display:inline-block;padding:3px 12px;margin:0 6px 6px 0;border-radius:999px;
+  background:rgba(255,255,255,.1);border:1px solid var(--line);font-size:.85rem}
+.cf-chip b{color:var(--gold)}
+
+.cf-card{background:var(--card);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:16px;
+  box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.cf-h2{margin:0;font-size:1.1rem;font-weight:700;color:#fff}
+.cf-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px}
+.cf-muted{color:var(--muted);font-size:.9rem}
+
+/* name card */
+.cf-namecard{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:end;
+  border-color:rgba(201,168,76,.55)}
+.cf-label{display:block;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);
+  font-weight:700;margin-bottom:6px}
+.cf-input{width:100%;font-size:1.2rem;padding:12px 14px;border-radius:10px;color:#fff;
+  border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.08);outline:none}
+.cf-input::placeholder{color:rgba(255,255,255,.45)}
+.cf-input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,168,76,.25)}
+.cf-input-sm{font-size:.95rem;padding:8px 12px;margin:10px 0}
+.cf-warn{margin-top:8px;padding:6px 10px;border-radius:8px;font-size:.85rem;color:#fde68a;
+  background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4)}
+.cf-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+@media (max-width:700px){.cf-namecard{grid-template-columns:1fr}}
+
+/* buttons */
+.cf-btn{display:inline-block;border:1px solid transparent;border-radius:10px;padding:11px 22px;font:inherit;
+  font-weight:700;cursor:pointer;text-decoration:none;white-space:nowrap}
+.cf-btn-primary{background:var(--gold);color:#111}
+.cf-btn-primary:hover:not(:disabled){background:#d9b95a}
+.cf-btn-primary:disabled{opacity:.4;cursor:not-allowed}
+.cf-btn-ghost{background:rgba(255,255,255,.08);border-color:var(--line);color:#fff}
+.cf-btn-ghost:hover{background:rgba(255,255,255,.16)}
+
+/* teams */
+.cf-teams{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px}
+.cf-team{text-align:center;width:84px}
+.cf-team img{height:64px;width:auto;max-width:100%;object-fit:contain;border-radius:8px}
+.cf-team span{display:block;font-size:.72rem;color:var(--muted);margin-top:6px;line-height:1.2}
+.cf-team.human img{outline:3px solid #2196f3;outline-offset:3px}
+.cf-team.ai{width:64px}
+.cf-team.ai img{height:46px}
+.cf-subhead{margin:14px 0 0;font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+
+/* details / pool preview */
+.cf-details>summary{cursor:pointer;color:var(--gold);font-weight:600;list-style:none}
+.cf-details>summary::-webkit-details-marker{display:none}
+.cf-details>summary::before{content:"\25B8 ";}
+.cf-details[open]>summary::before{content:"\25BE ";}
+.cf-list{columns:220px;column-gap:22px;margin:0;padding:0;list-style:none;max-height:420px;overflow:auto}
+.cf-list li{break-inside:avoid;padding:2px 0;font-size:.9rem}
+.cf-list b{display:inline-block;min-width:34px;color:var(--gold);font-size:.72rem}
+
+/* custom pool picker */
+.cf-sticky{position:sticky;top:8px;z-index:30;display:flex;align-items:center;justify-content:space-between;
+  gap:14px;flex-wrap:wrap;padding:12px 16px}
+.cf-pills{display:flex;flex-wrap:wrap;gap:8px}
+.cf-pill{padding:3px 11px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.07);
+  font-size:.8rem}
+.cf-pill b{margin-left:4px}
+.cf-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.cf-group{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.cf-group header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.cf-group h3{margin:0;font-size:1rem;font-weight:700;color:#fff}
+.cf-count{padding:1px 10px;border-radius:999px;font-size:.8rem;font-weight:700;background:#475569;color:#fff}
+.cf-gbtns{display:flex;gap:6px;flex-wrap:wrap}
+.cf-gbtns button{font:inherit;font-size:.78rem;padding:3px 10px;border-radius:8px;cursor:pointer;color:#fff;
+  background:rgba(255,255,255,.08);border:1px solid var(--line)}
+.cf-gbtns button:hover{background:rgba(255,255,255,.18)}
+.cf-gsearch{width:100%;margin:10px 0 6px;padding:6px 10px;font-size:.85rem;border-radius:8px;color:#fff;
+  border:1px solid var(--line);background:rgba(255,255,255,.07);outline:none}
+.cf-gsearch:focus{border-color:var(--gold)}
+.cf-glist{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px 6px}
+.cf-glist label{display:flex;gap:8px;align-items:center;padding:3px 4px;border-radius:6px;cursor:pointer;font-size:.9rem}
+.cf-glist label:hover{background:rgba(255,255,255,.08)}
+.cf-glist input{accent-color:var(--gold)}
+
+/* progress states (group badge, group card border, sticky pill) */
+.cf-group[data-state="part"] .cf-count{background:#d97706}
+.cf-group[data-state="ok"]   .cf-count{background:#16a34a}
+.cf-group[data-state="over"] .cf-count{background:#dc2626}
+.cf-group[data-state="ok"]{border-color:rgba(34,197,94,.6)}
+.cf-group[data-state="over"]{border-color:rgba(220,38,38,.7)}
+.cf-pill[data-state="part"]{border-color:#d97706;color:#fcd34d}
+.cf-pill[data-state="ok"]{border-color:#22c55e;color:#86efac}
+.cf-pill[data-state="over"]{border-color:#ef4444;color:#fca5a5}
