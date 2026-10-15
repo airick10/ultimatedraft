@@ -72,6 +72,11 @@ table.stat td.strong{font-weight:700}
 table.stat th[data-dir="asc"]::after{content:" \25B2";font-size:.6rem}
 table.stat th[data-dir="desc"]::after{content:" \25BC";font-size:.6rem}
 tr.none td{text-align:center!important;color:var(--muted)}
+table.stat tfoot td{background:#eef2f7;font-weight:700;color:#111827;border-top:2px solid #cbd5e1;border-bottom:0}
+.json-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0 2px;font-size:.85rem;color:var(--muted)}
+.json-bar a{padding:4px 12px;border-radius:999px;border:1px solid var(--line);background:#f9fafb;color:#0b5cab;
+  text-decoration:none;font-weight:600}
+.json-bar a:hover{border-color:var(--gold);background:#fff}
 footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
 @media print{.nav{display:none}.team-body{display:block!important}.team{break-inside:avoid-page}}
 {% endraw %}
@@ -79,7 +84,7 @@ footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
 </head>
 <body data-view="both">
 
-{% macro stat_table(cols, rows) %}
+{% macro stat_table(cols, rows, foot=None) %}
 <div class="tbl-wrap">
 <table class="stat">
   <thead><tr>
@@ -102,6 +107,11 @@ footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
     <tr class="none"><td colspan="{{ cols|length }}">None</td></tr>
   {% endfor %}
   </tbody>
+    {% if foot %}
+  <tfoot>
+    <tr>{% for cell in foot %}<td class="{{ cell.kind }}">{{ cell.text }}</td>{% endfor %}</tr>
+  </tfoot>
+  {% endif %}
 </table>
 </div>
 {% endmacro %}
@@ -134,13 +144,20 @@ footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
       <div class="meta">{{ t.meta }}</div>
     <span class="chev">&#9662;</span>
   </div>
-    <div class="team-body">
-    {% for sec in t.sections %}
+      <div class="team-body">
+      {% if t.json_urls %}
+      <div class="json-bar">
+        <span>Roster data in your source-file format:</span>
+        <a href="{{ t.json_urls.hitters }}">Hitters JSON</a>
+        <a href="{{ t.json_urls.pitchers }}">Pitchers JSON</a>
+      </div>
+      {% endif %}
+      {% for sec in t.sections %}
     <div class="sec sec-{{ sec.cls }}">
       <h3>{{ sec.title }}</h3>
       {% for tb in sec.tables %}
         {% if tb.label %}<h4>{{ tb.label }}</h4>{% endif %}
-        {{ stat_table(tb.cols, tb.rows) }}
+        {{ stat_table(tb.cols, tb.rows, tb.foot) }}
       {% endfor %}
     </div>
     {% endfor %}

@@ -10,598 +10,24 @@
 
 {% block scripts %}
 <script>
-const socket = io();
-const currentDraftname = "{{ draftname }}";
-const currentSport = "{{ sport }}";
-const POS_TO_SLOT = {
-    'C':'C','1B':'1B','2B':'2B','3B':'3B','SS':'SS',
-    'LF':'LF','CF':'CF','RF':'RF','SP':'S','RP':'R','CL':'R'
+/* this draft's server values; everything else lives in static/draft_*.js */
+window.DRAFT = {
+    draftname:       {{ draftname|tojson }},
+    sport:           {{ sport|tojson }},
+    currentTeam:     {{ current_team|tojson }},
+    currentTeamType: {{ current_team_type|tojson }},
+    currentPick:     {{ (current_pick if current_pick is defined else draft_log|length + 1)|tojson }},
+    hasPicks:        {{ (draft_log|length > 0)|tojson }},
+    teams:           {{ all_teams|tojson }},
+    rosterSize:      {{ roster_slots|length }},
+    cap:             {{ cap|tojson }},
+    initialLog:      {{ draft_log|tojson }},
+    labels:          {{ (label_by_id if label_by_id is defined else {})|tojson }}
 };
-let selectedPlayerId = null;
-let sortDir = {};
-let pickTimer = null;
-let timeLeft  = 0;
-let draftRunning  = false;
-let draftComplete = false;
-let hasPicks      = {{ 'true' if draft_log else 'false' }};
-const DRAFT_TEAMS = {{ all_teams|tojson }};          // teams in draft order
-const ROSTER_SIZE = {{ roster_slots|length }};
-const TOTAL_PICKS = DRAFT_TEAMS.length * ROSTER_SIZE;
-const STRIP_SIZE  = 8;
-let currentPick   = {{ current_pick }};      // the pick number now on the clock
-const logoEls     = new Map();                        // key ("p12" for a pick, "d3" for a round divider) -> DOM element
-const SALARY_CAP  = parseFloat("{{ cap }}") || 0;      // 0 = no cap
-const INITIAL_LOG = {{ draft_log|tojson }};
-const salaryById  = {};     // player id -> salary
-const spentByTeam = {};     // team name -> total salary drafted
-const LABELS = {{ label_by_id|tojson }};
-
-// ── SocketIO connection ──
-socket.on('connect', () => {
-    console.log('SocketIO connected:', socket.id);
-    socket.emit('request_sync', { draftname: currentDraftname, sport: currentSport });
-});
-socket.on('disconnect', () => {
-    console.log('SocketIO disconnected');
-});
-
-// ── Send pick to server ──
-function draftPlayer() {
-    console.log('draftPlayer fired, selectedPlayerId:', selectedPlayerId);
-    if (!selectedPlayerId) return;
-    socket.emit('make_pick', {
-        draftname: currentDraftname,
-        player_id: selectedPlayerId,
-        sport:     currentSport
-    });
-}
-
-// ── Receive pick from server ──
-socket.on('pick_made', (entry) => {
-    console.log('Pick made:', entry);
-
-    // the server tells us the real next pick number (it can skip full teams)
-    currentPick = entry.next_pick || (entry.pick + 1);
-    addSpend(entry);
-    if (entry.bonus) addSpend(entry.bonus);
-    hasPicks = true;
-    updateToggleBtn();
-
-    // main pick, plus the two-way twin if there is one
-    if (entry.bonus) ensureFlexSlot(entry.team);   // two-way pick: one extra FLEX slot for this team
-    applyPickToUI(entry);
-    if (entry.bonus) applyPickToUI(entry.bonus);
-
-    // clear selected state
-    selectedPlayerId = null;
-    document.getElementById('draftBtn').style.display = 'none';
-    document.getElementById('selectedName').textContent = 'Click a player to select';
-    document.getElementById('selectedStats').textContent = '';
-
-    // switch roster dropdown to next picking team
-    const select = document.getElementById('rosterSelect');
-    if (select && entry.next_team) {
-        select.value = entry.next_team;
-        showRoster(entry.next_team);
-    }
-
-    // update on-the-clock display
-    const clockEl = document.getElementById('clockTeam');
-    if (clockEl) clockEl.textContent = entry.next_team;
-
-    // redraw the logo queue
-    setActiveLogo();
-
-    // announce last pick
-    const announcement = document.getElementById('tickerAnnouncement');
-    if (announcement) {
-        announcement.textContent = entry.bonus
-            ? `${entry.team} select ${entry.pos} — ${entry.player} (plus ${entry.bonus.pos} ${entry.bonus.player})`
-            : `${entry.team} select ${entry.pos} — ${entry.player}`;
-    }
-
-    // reset the clock for the next team (it only ticks if the draft is running)
-    const isHuman = entry.next_team_type === 'human';
-    startTimer(isHuman ? 120 : 15);
-});
-
-
-socket.on('pick_error', (data) => {
-    console.error('Pick error:', data.message);
-    alert(data.message);
-});
-
-
-socket.on('cap_warning', (data) => {
-    if (confirm(data.message + '\n\nDraft this player anyway?')) {
-        socket.emit('make_pick', {
-            draftname: currentDraftname,
-            player_id: data.player_id,
-            sport:     currentSport,
-            confirmed: true
-        });
-    }
-});
-
-socket.on('full_sync', (data) => {
-    console.log('Full sync received:', data);
-    rebuildSpend(data.log);
-
-    currentPick  = data.current_pick;
-    draftRunning = !!data.running;
-    hasPicks     = data.log.length > 0;
-    updateToggleBtn();
-
-    const logDiv = document.getElementById('draftLog');
-    if (logDiv) {
-        logDiv.innerHTML = '';
-        if (data.log.length === 0) {
-            const el = document.createElement('div');
-            el.className = 'log-empty';
-            el.textContent = 'No picks yet';
-            logDiv.appendChild(el);
-        } else {
-            data.log.forEach(entry => {
-                const el = document.createElement('div');
-                el.className = 'log-entry';
-                el.textContent = logLine(entry);
-                logDiv.appendChild(el);
-            });
-        }
-        scrollLogToBottom();
-    }
-
-    data.log.forEach(entry => {
-        const row = document.querySelector(`tr[data-id="${entry.id}"]`);
-        if (row) row.classList.add('drafted');
-    });
-
-    const clockEl = document.getElementById('clockTeam');
-    if (clockEl) clockEl.textContent = data.current_team;
-    setActiveLogo();
-
-    const select = document.getElementById('rosterSelect');
-    if (select) {
-        select.value = data.current_team;
-        showRoster(data.current_team);
-    }
-
-    if (data.complete) {
-        showDraftComplete();
-    } else {
-        startTimer(data.current_team_type === 'human' ? 120 : 15);
-    }
-});
-
-socket.on('draft_state', (data) => {
-    if (data.draftname !== currentDraftname) return;
-    draftRunning = data.running;
-    if (draftRunning) {
-        runClock();
-    } else {
-        clearInterval(pickTimer);
-    }
-    updateToggleBtn();
-});
-
-
-socket.on('draft_complete', showDraftComplete);
-
-// ── DOM ready ──
-document.addEventListener('DOMContentLoaded', () => {
-    renderLogoStrip();
-    scrollLogToBottom();
-    buildSalaryMap();
-    rebuildSpend(INITIAL_LOG);
-    updateSalaryLine();
-    // show first team roster on load
-    const first = document.querySelector('.roster-team');
-    if (first) first.style.display = 'block';
-    setTimeout(() => {
-        const teamName = "{{ current_team }}";
-        console.log('Setting active logo:', teamName);
-        console.log('Logo found:', document.querySelector(`.logo-wrap[data-team="${teamName}"]`));
-        setActiveLogo(teamName);
-    }, 200);
-
-    // player row click handler
-    document.querySelectorAll('#playerBody tr').forEach(row => {
-        row.addEventListener('click', () => {
-            selectedPlayerId = row.dataset.id;
-            const cells = row.cells;
-            const pos  = cells[0].innerText;
-            const name = cells[1].innerText;
-            const team = cells[2].innerText;
-            const s1   = cells[3].innerText;
-            const s2   = cells[4].innerText;
-            const s3   = cells[5].innerText;
-            document.getElementById('selectedName').textContent  = `${pos} — ${name}`;
-            document.getElementById('selectedStats').textContent = `${team} | ${s1} / ${s2} / ${s3}`;
-            document.getElementById('draftBtn').style.display    = 'inline-block';
-            document.querySelectorAll('#playerBody tr').forEach(r => r.classList.remove('selected-row'));
-            row.classList.add('selected-row');
-        });
-    });
-
-    // start timer for first pick
-    const firstTeamType = "{{ current_team_type }}";
-    console.log('firstTeamType:', firstTeamType);
-    startTimer(firstTeamType === 'human' ? 120 : 15);
-});
-
-// ── Sort table ──
-function sortTable(col) {
-    const tbody = document.getElementById('playerBody');
-    const rows = Array.from(tbody.querySelectorAll('tr'));
-    sortDir[col] = !sortDir[col];
-    rows.sort((a, b) => {
-        let aVal = a.cells[col].innerText.trim();
-        let bVal = b.cells[col].innerText.trim();
-        if (col === 1) {
-            const aLast = aVal.split(' ').pop();
-            const bLast = bVal.split(' ').pop();
-            return sortDir[col] ? aLast.localeCompare(bLast) : bLast.localeCompare(aLast);
-        }
-        if (col >= 3) {
-            aVal = parseFloat(aVal) || 0;
-            bVal = parseFloat(bVal) || 0;
-            return sortDir[col] ? aVal - bVal : bVal - aVal;
-        }
-        return sortDir[col] ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-    });
-    rows.forEach(r => tbody.appendChild(r));
-    document.querySelectorAll('.sort-icon').forEach((el, i) => {
-        el.textContent = i === col ? (sortDir[col] ? '↑' : '↓') : '↕';
-    });
-}
-
-// ── Filter by position ──
-function filterPos(btn, pos) {
-    document.querySelectorAll('.btn-pos').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const isPitcher = (pos === 'SP' || pos === 'RP');
-    const isAll = (pos === 'ALL');
-    document.getElementById('hitter-head').style.display = isPitcher ? 'none' : '';
-    document.getElementById('pitcher-head').style.display = isPitcher ? '' : 'none';
-    document.querySelectorAll('#playerBody tr').forEach(row => {
-        const rowPos  = row.dataset.pos;
-        const rowKind = row.dataset.kind;
-        if (isAll) {
-            row.style.display = '';
-        } else {
-            row.style.display = (rowPos === pos) ? '' : 'none';
-        }
-    });
-}
-
-// ── Roster dropdown ──
-function showRoster(teamName) {
-    document.querySelectorAll('.roster-team').forEach(el => el.style.display = 'none');
-    document.getElementById(`roster-${teamName}`).style.display = 'block';
-    updateSalaryLine(teamName);
-}
-
-// -- Highlighting Current Drafting Team --
-function setActiveLogo() {
-    renderLogoStrip();
-}
-
-function startTimer(seconds) {
-    clearInterval(pickTimer);
-    timeLeft = seconds;
-    updateTimerDisplay();
-    if (draftRunning) runClock();   // paused drafts just show the time, no ticking
-}
-
-function runClock() {
-    clearInterval(pickTimer);
-    pickTimer = setInterval(() => {
-        timeLeft--;
-        updateTimerDisplay();
-        if (timeLeft <= 0) {
-            clearInterval(pickTimer);
-            skipPick();
-        }
-    }, 1000);
-}
-
-function updateToggleBtn() {
-    const btn = document.getElementById('draftToggleBtn');
-    if (!btn) return;
-    if (draftComplete) {
-        btn.style.display = 'none';
-        return;
-    }
-    btn.textContent = draftRunning ? 'Stop Draft' : (hasPicks ? 'Resume Draft' : 'Start Draft');
-    btn.classList.toggle('running', draftRunning);
-}
-
-function toggleDraft() {
-    socket.emit(draftRunning ? 'pause_draft' : 'start_draft', {
-        draftname: currentDraftname,
-        sport:     currentSport
-    });
-}
-
-function updateTimerDisplay() {
-    const el = document.getElementById('tickerTimer');
-    if (!el) return;
-    const mins = Math.floor(timeLeft / 60);
-    const secs = timeLeft % 60;
-    el.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-    // go red under 30 seconds
-    if (timeLeft <= 30) {
-        el.classList.add('warning');
-    } else {
-        el.classList.remove('warning');
-    }
-}
-
-function skipPick() {
-    console.log('Timer expired — skipping pick');
-    socket.emit('skip_pick', {
-        draftname: currentDraftname,
-        sport:     currentSport
-    });
-}
-
-function switchStatView(view) {
-    const showReal  = view === 'real';
-    document.querySelectorAll('.stat-real').forEach(el => {
-        el.style.display = showReal ? '' : 'none';
-    });
-    document.querySelectorAll('.stat-strat').forEach(el => {
-        el.style.display = showReal ? 'none' : '';
-    });
-}
-
-function mapPosToSlot(pos) {
-    return POS_TO_SLOT[pos] || 'UT';
-}
-
-function showDraftComplete() {
-    draftComplete = true;
-    draftRunning  = false;
-    updateToggleBtn();
-    clearInterval(pickTimer);
-    const announcement = document.getElementById('tickerAnnouncement');
-    if (announcement) announcement.textContent = 'Draft complete! Use "Export Excel" at the top to download the rosters.';
-    const timer = document.getElementById('tickerTimer');
-    if (timer) timer.textContent = '--';
-    document.getElementById('draftBtn').style.display = 'none';
-    document.getElementById('clockTeam').textContent = 'Draft complete';
-}
-function scrollLogToBottom() {
-    const pane = document.querySelector('.pane-left');
-    if (pane) pane.scrollTop = pane.scrollHeight;
-}
-// snake order: odd rounds run forward, even rounds run backward
-function teamForPick(pick) {
-    const n = DRAFT_TEAMS.length;
-    const round = Math.floor((pick - 1) / n);
-    const i = (pick - 1) % n;
-    return DRAFT_TEAMS[round % 2 === 0 ? i : n - 1 - i];
-}
-
-function buildLogoEl(team) {
-    const wrap = document.createElement('div');
-    wrap.className = 'logo-wrap ' + (team.is_human ? 'human' : 'ai');
-    wrap.dataset.team = team.name;
-
-    const img = document.createElement('img');
-    img.src = `https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/baseball/${encodeURIComponent(team.name)}_bb.png`;
-    img.alt = team.name;
-    img.onerror = () => { img.style.opacity = '0.2'; };
-
-    const label = document.createElement('div');
-    label.className = 'team-label';
-    label.textContent = team.name;
-
-    wrap.appendChild(img);
-    wrap.appendChild(label);
-    return wrap;
-}
-
-function logLine(e) {
-    return e.is_bonus
-        ? `↳ ${e.team} — ${e.pos} ${e.player} (two-way)`
-        : `${e.pick}. ${e.team} — ${e.pos} ${e.player}`;
-}
-
-function applyPickToUI(e) {
-    const row = document.querySelector(`tr[data-id="${e.id}"]`);
-    if (row) row.classList.add('drafted');
-
-    const logDiv = document.getElementById('draftLog');
-    if (logDiv) {
-        const noPicksMsg = logDiv.querySelector('.log-empty');
-        if (noPicksMsg) noPicksMsg.remove();
-        const el = document.createElement('div');
-        el.className = 'log-entry';
-        el.textContent = logLine(e);
-        logDiv.appendChild(el);
-        scrollLogToBottom();
-    }
-
-    const teamRoster = document.getElementById(`roster-${e.team}`);
-    if (teamRoster) {
-        const slotLabel = mapPosToSlot(e.pos);
-        // natural slot, then UT (hitters only), then FLEX, then anything open
-        let slot = teamRoster.querySelector(`.t-pick[data-slot="${slotLabel}"]:not(.filled)`);
-        if (!slot && slotLabel !== 'S' && slotLabel !== 'R') {
-            slot = teamRoster.querySelector(`.t-pick[data-slot="UT"]:not(.filled)`);
-        }
-        if (!slot) {
-            slot = teamRoster.querySelector(`.t-pick[data-slot="FLEX"]:not(.filled)`);
-        }
-        if (!slot) {
-            slot = teamRoster.querySelector(`.t-pick:not(.filled)`);
-        }
-        if (slot) {
-            slot.textContent = `${e.pos}: ${LABELS[String(e.id)] || e.player}`;
-            slot.classList.add('filled');
-        }
-    }
-}
-
-function renderLogoStrip() {
-    const strip = document.getElementById('logoStrip');
-    if (!strip) return;
-
-    const n        = DRAFT_TEAMS.length;
-    const DURATION = 500;                          // ms: raise for slower, lower for snappier
-    const EASE     = 'cubic-bezier(.22, .8, .3, 1)';
-    const stripBox = strip.getBoundingClientRect();
-
-    // FIRST: record where everything is now, and cancel any animation still running
-    const first = new Map();
-    logoEls.forEach((el, key) => {
-        first.set(key, el.getBoundingClientRect());
-        el.getAnimations().forEach(a => a.cancel());
-    });
-    const isFirstRender = logoEls.size === 0;
-
-    // Work out what should be showing: [key, element] in order
-    const desired = [];
-    let prevRound = null;
-    for (let k = 0; k < STRIP_SIZE; k++) {
-        const pick = currentPick + k;
-        if (pick > TOTAL_PICKS) break;
-
-        const round = Math.floor((pick - 1) / n);
-        if (prevRound !== null && round !== prevRound) {
-            const dkey = `d${round}`;
-            let div = logoEls.get(dkey);
-            if (!div) {
-                div = document.createElement('div');
-                div.className = 'round-divider';
-                div.title = `Round ${round + 1}`;
-            }
-            desired.push([dkey, div]);
-        }
-        prevRound = round;
-
-        const key = `p${pick}`;
-        let el = logoEls.get(key);
-        if (!el) el = buildLogoEl(teamForPick(pick));
-        el.classList.toggle('active', k === 0);
-        desired.push([key, el]);
-    }
-    const desiredKeys = new Set(desired.map(d => d[0]));
-
-    // Elements that are no longer showing: slide them out as "ghosts", then remove
-    logoEls.forEach((el, key) => {
-        if (desiredKeys.has(key)) return;
-        const box = first.get(key);
-        if (!isFirstRender && box) {
-            el.style.position      = 'absolute';
-            el.style.left          = (box.left - stripBox.left) + 'px';
-            el.style.top           = (box.top  - stripBox.top)  + 'px';
-            el.style.width         = box.width  + 'px';
-            el.style.height        = box.height + 'px';
-            el.style.pointerEvents = 'none';
-            const ghost = el;
-            ghost.animate(
-                [{ transform: 'translateX(0)', opacity: 1 },
-                 { transform: `translateX(-${box.width + 8}px)`, opacity: 0 }],
-                { duration: DURATION, easing: EASE, fill: 'forwards' }
-            ).onfinish = () => ghost.remove();
-        } else {
-            el.remove();
-        }
-        logoEls.delete(key);
-    });
-
-    // Put the wanted elements in order (appendChild moves existing nodes)
-    desired.forEach(([key, el]) => {
-        strip.appendChild(el);
-        logoEls.set(key, el);
-    });
-
-    // "Draft complete" placeholder when nothing is left to show
-    let empty = strip.querySelector('.strip-empty');
-    if (!desired.length) {
-        if (!empty) {
-            empty = document.createElement('div');
-            empty.className = 'team-label strip-empty';
-            empty.style.padding = '14px';
-            empty.textContent = 'Draft complete';
-            strip.appendChild(empty);
-        }
-    } else if (empty) {
-        empty.remove();
-    }
-
-    // LAST + INVERT + PLAY: slide survivors from old spot to new, fade new ones in
-    if (isFirstRender) return;
-    desired.forEach(([key, el]) => {
-        const before = first.get(key);
-        if (before) {
-            const dx = before.left - el.getBoundingClientRect().left;
-            if (Math.abs(dx) > 1) {
-                el.animate(
-                    [{ transform: `translateX(${dx}px)` }, { transform: 'translateX(0)' }],
-                    { duration: DURATION, easing: EASE }
-                );
-            }
-        } else {
-            el.animate(
-                [{ opacity: 0, transform: 'translateX(40px)' }, { opacity: 1, transform: 'translateX(0)' }],
-                { duration: DURATION, easing: EASE }
-            );
-        }
-    });
-}
-
-// a two-way pick gives that team one extra FLEX slot in the roster panel
-function ensureFlexSlot(teamName) {
-    const teamRoster = document.getElementById(`roster-${teamName}`);
-    if (!teamRoster) return;
-    const slot = document.createElement('div');
-    slot.className = 't-pick';
-    slot.dataset.slot = 'FLEX';
-    slot.textContent = 'FLEX: —';
-    teamRoster.appendChild(slot);
-}
-
-function parseSalaryText(v) {
-    return parseFloat(String(v || '').replace(/[$,\s]/g, '')) || 0;
-}
-
-function formatMoney(n) {
-    return (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
-}
-
-function buildSalaryMap() {
-    document.querySelectorAll('#playerBody tr').forEach(row => {
-        salaryById[row.dataset.id] = parseSalaryText(row.dataset.sal);
-    });
-}
-
-function addSpend(e) {
-    spentByTeam[e.team] = (spentByTeam[e.team] || 0) + (salaryById[String(e.id)] || 0);
-}
-
-function rebuildSpend(log) {
-    Object.keys(spentByTeam).forEach(k => delete spentByTeam[k]);
-    log.forEach(addSpend);
-}
-
-function updateSalaryLine(teamName) {
-    const el = document.getElementById('salaryLeft');
-    if (!el) return;
-    if (!SALARY_CAP) {
-        el.style.display = 'none';
-        return;
-    }
-    const select = document.getElementById('rosterSelect');
-    const team = teamName || (select ? select.value : '');
-    const left = SALARY_CAP - (spentByTeam[team] || 0);
-    el.textContent = `Salary left: ${formatMoney(left)}`;
-    el.classList.toggle('over', left < 0);
-    el.style.display = 'block';
-}
 </script>
+<script src="{{ url_for('static', filename='draft_bb.js') }}"></script>
+<script src="{{ url_for('static', filename='draft_common.js') }}"></script>
+<script src="{{ url_for('static', filename='poolsearch.js') }}"></script>
 {% endblock %}
 
 {% block body %}
@@ -663,10 +89,15 @@ function updateSalaryLine(teamName) {
             <button class="btn-pos" onclick="filterPos(this,'RP')">RP</button>
 
         </div>
-        <select id="statView" onchange="switchStatView(this.value)" class="roster-select" style="width:140px;">
-            <option value="real">Real Stats</option>
-            <option value="strat">Strat Stats</option>
-        </select>
+        <div class="pool-tools">
+            <input id="playerSearch" class="pool-search" type="search" autocomplete="off"
+                   placeholder="Search first or last name   ( / )">
+            <span id="searchCount" class="search-count"></span>
+            <select id="statView" onchange="switchStatView(this.value)" class="roster-select" style="width:140px;">
+                <option value="real">Real Stats</option>
+                <option value="strat">Strat Stats</option>
+            </select>
+        </div>
 
     </div>
 
@@ -677,12 +108,15 @@ function updateSalaryLine(teamName) {
                   <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
                   <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
                   <!-- real stats -->
+                    <th class="stat-real" onclick="sortTable(8)">Bats <span class="sort-icon">↕</span></th>
                     <th class="stat-real" onclick="sortTable(3)">AVG <span class="sort-icon">↕</span></th>
                     <th class="stat-real" onclick="sortTable(4)">HR <span class="sort-icon">↕</span></th>
                     <th class="stat-real" onclick="sortTable(5)">RBI <span class="sort-icon">↕</span></th>
                     <th class="stat-real" onclick="sortTable(6)">SB <span class="sort-icon">↕</span></th>
                     <th class="stat-real" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>
                     <!-- strat stats -->
+                    <th class="stat-strat" style="display:none" onclick="sortTable(8)">Bats <span class="sort-icon">↕</span></th>
+                    <th class="stat-strat" style="display:none" onclick="sortTable(9)">Balance <span class="sort-icon">↕</span></th>
                     <th class="stat-strat" style="display:none" onclick="sortTable(3)">OBTBvL <span class="sort-icon">↕</span></th>
                     <th class="stat-strat" style="display:none" onclick="sortTable(4)">OBTBvR <span class="sort-icon">↕</span></th>
                     <th class="stat-strat" style="display:none" onclick="sortTable(5)">Fielding <span class="sort-icon">↕</span></th>
@@ -694,12 +128,15 @@ function updateSalaryLine(teamName) {
                 <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
                 <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
                 <!-- real stats -->
+                <th class="stat-real" onclick="sortTable(8)">Throws <span class="sort-icon">↕</span></th>
                 <th class="stat-real" onclick="sortTable(3)">ERA <span class="sort-icon">↕</span></th>
                 <th class="stat-real" onclick="sortTable(4)">W <span class="sort-icon">↕</span></th>
                 <th class="stat-real" onclick="sortTable(5)">WHIP <span class="sort-icon">↕</span></th>
                 <th class="stat-real" onclick="sortTable(6)">SV <span class="sort-icon">↕</span></th>
                 <th class="stat-real" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>
                 <!-- strat stats -->
+                <th class="stat-strat" style="display:none" onclick="sortTable(8)">Throws <span class="sort-icon">↕</span></th>
+                <th class="stat-strat" style="display:none" onclick="sortTable(9)">Balance <span class="sort-icon">↕</span></th>
                 <th class="stat-strat" style="display:none" onclick="sortTable(3)">OBTBvL <span class="sort-icon">↕</span></th>
                 <th class="stat-strat" style="display:none" onclick="sortTable(4)">OBTBvR <span class="sort-icon">↕</span></th>
                 <th class="stat-strat" style="display:none" onclick="sortTable(5)">Endurance <span class="sort-icon">↕</span></th>
@@ -713,7 +150,7 @@ function updateSalaryLine(teamName) {
           <tbody id="playerBody">
               {% for p in players %}
               {% if p.kind == "hitter" %}
-                <tr data-pos="{{ p.short_pos }}" data-kind="hitter" data-id="{{ p.id }}" data-sal="{{ p.s_sal }}">
+                <tr data-pos="{{ p.short_pos }}" data-kind="hitter" data-id="{{ p.id }}" data-sal="{{ p.s_sal }}" data-url="{{ p.BaseballReferenceURL }}">
                     <td class="pos-badge">{{ p.short_pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
                     <td class="team-cell">
@@ -726,12 +163,15 @@ function updateSalaryLine(teamName) {
                       {% endif %}
                     </td>
                     <!-- real stats -->
+                    <td class="stat-real">{{ p.Bats if p.Bats is defined else '—' }}</td>
                     <td class="stat-real">{{ p.b_batting_avg if p.b_batting_avg is defined else '—' }}</td>
                     <td class="stat-real">{{ p.b_hr if p.b_hr is defined else '—' }}</td>
                     <td class="stat-real">{{ p.b_rbi if p.b_rbi is defined else '—' }}</td>
                     <td class="stat-real">{{ p.b_sb if p.b_sb is defined else '—' }}</td>
                     <td class="stat-real">{{ p.s_sal if p.s_sal is defined else '—' }}</td>
                     <!-- strat stats -->
+                    <td class="stat-strat" style="display:none">{{ p.Bats if p.Bats is defined else '—' }}</td>
+                    <td class="stat-strat" style="display:none">{{ p.s_bal if p.s_bal is defined else '—' }}</td>
                     <td class="stat-strat" style="display:none">{{ p.s_obtbvl if p.s_obtbvl is defined else '—' }}</td>
                     <td class="stat-strat" style="display:none">{{ p.s_obtbvr if p.s_obtbvr is defined else '—' }}</td>
                     <td class="stat-strat" style="display:none">{{ p.s_fielding if p.s_fielding is defined else '—' }}</td>
@@ -740,7 +180,7 @@ function updateSalaryLine(teamName) {
 
                 </tr>
               {% else %}
-                <tr data-pos="{{ p.short_pos }}" data-kind="pitcher" data-id="{{ p.id }}"  data-sal="{{ p.s_sal }}" style="display:none">
+                <tr data-pos="{{ p.short_pos }}" data-kind="pitcher" data-id="{{ p.id }}"  data-sal="{{ p.s_sal }}" data-url="{{ p.BaseballReferenceURL }}" style="display:none">
                     <td class="pos-badge">{{ p.short_pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
                     <td class="team-cell">
@@ -753,12 +193,14 @@ function updateSalaryLine(teamName) {
                       {% endif %}
                     </td>
                     <!-- real stats -->
+                    <td class="stat-real">{{ p.Throws if p.Throws is defined else '—' }}</td>
                     <td class="stat-real">{{ p.p_earned_run_avg if p.p_earned_run_avg is defined else '—' }}</td>
                     <td class="stat-real">{{ p.p_w if p.p_w is defined else '—' }}</td>
                     <td class="stat-real">{{ p.p_whip if p.p_whip is defined else '—' }}</td>
                     <td class="stat-real">{{ p.p_sv if p.p_sv is defined else '—' }}</td>
                     <td class="stat-real">{{ p.s_sal if p.s_sal is defined else '—' }}</td>
                     <!-- strat stats -->
+                    <td class="stat-strat" style="display:none">{{ p.Throws if p.Throws is defined else '—' }}</td>
                     <td class="stat-strat" style="display:none">{{ p.s_obtbvl if p.s_obtbvl is defined else '—' }}</td>
                     <td class="stat-strat" style="display:none">{{ p.s_obtbvr if p.s_obtbvr is defined else '—' }}</td>
                     <td class="stat-strat" style="display:none">{{ p.s_endurance if p.s_endurance is defined else '—' }}</td>
@@ -802,7 +244,7 @@ function updateSalaryLine(teamName) {
     {% for slot in team_slots[team.team_id] %}    {% set pick = assigned[loop.index0] %}
     {% if pick %}
     <div class="t-pick filled" data-slot="{{ slot }}" id="slot-{{ team.name }}-{{ loop.index0 }}">
-        {{ pick.pos }}: {{ label_by_id.get(pick.id|string, pick.player) }}
+        {{ pick.pos }}: {% set nm = label_by_id.get(pick.id|string, pick.player) %}{% set u = url_by_id.get(pick.id|string) %}{% if u %}<a class="pl-link" href="{{ u }}" target="_blank" rel="noopener noreferrer">{{ nm }}</a>{% else %}{{ nm }}{% endif %}
     </div>
     {% else %}
     <div class="t-pick" data-slot="{{ slot }}" id="slot-{{ team.name }}-{{ loop.index0 }}">
