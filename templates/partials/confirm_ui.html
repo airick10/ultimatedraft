@@ -2,7 +2,7 @@
    route variables: mode, num_teams, human_teams, ai_set, pool, cap, players, saved_names #}
 {% set pool_label = {'full': 'Complete', 'random': 'Random', 'custom': 'Custom'}.get(pool, pool) %}
 
-<div class="cf-wrap">
+<div class="cf-wrap theme-{{ cfg.sport|lower }}">
 
   <a class="cf-back" href="{{ cfg.home }}">&larr; Back to {{ cfg.sport }}</a>
 

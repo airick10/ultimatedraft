@@ -1,5 +1,5 @@
 {# Shared UI for the three sport setup pages. Expects `cfg` (set by the sport's template) and saved_drafts. #}
-<div class="cf-wrap">
+<div class="cf-wrap theme-{{ cfg.sport|lower }}">
 
   <a class="cf-back" href="{{ cfg.home }}">&larr; All sports</a>
   <h1 class="cf-title">{{ cfg.sport }} Draft</h1>
@@ -15,7 +15,7 @@
 
         <div class="su-label">How many teams are in the draft?</div>
         <div class="su-seg">
-          {% for n in [4, 8, 12, 16, 24, 32] %}
+          {% for n in [2, 4, 8, 12, 16, 24, 32] %}
             <input type="radio" name="num_teams" id="nt{{ n }}" value="{{ n }}" {{ 'checked' if n == 4 }}>
             <label for="nt{{ n }}">{{ n }}</label>
           {% endfor %}
@@ -58,14 +58,16 @@
         <div id="capWrap" hidden>
           <div class="su-money">
             <span>$</span>
-            <input type="number" name="cap_amount" id="cap_amount" class="cf-input" min="1" step="1" placeholder="e.g. 100000000">
+            <input type="number" name="cap_amount" id="cap_amount" class="cf-input" min="1" step="1"
+                   value="{{ cap_default or '' }}" placeholder="e.g. 100000000">
           </div>
-          {% if cfg.cap_presets %}
+          {% if cap_options %}
             <div class="su-presets">
-              {% for amount in cfg.cap_presets %}
-                <button type="button" data-amount="{{ amount }}">${{ '{:,.0f}'.format(amount) }}</button>
+              {% for label, amount in cap_options %}
+                <button type="button" data-amount="{{ amount }}">{{ label }} ${{ '{:,.0f}'.format(amount) }}</button>
               {% endfor %}
             </div>
+            <p class="cf-muted" style="margin-top:8px">Suggested = roster size &times; the average salary in your data, plus about a third.</p>
           {% endif %}
         </div>
       </section>
