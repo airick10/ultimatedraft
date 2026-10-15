@@ -1,0 +1,27 @@
+/* One block per sport. Anything you remove falls back to the defaults in confirm.css.
+   Fonts must be loaded in base.html (see Part D) or declared with @font-face below. */
+
+/* Custom downloaded font, if you want one:
+@font-face { font-family: 'MyBaseball'; src: url('fonts/Baseball.otf') format('opentype'); font-display: swap; }
+*/
+
+.theme-baseball{
+  --accent:#c9a84c;  --accent-hover:#d9b95a;  --accent-ink:#111;  --accent-soft:rgba(201,168,76,.15);
+  --overlay:rgba(24,14,6,.55);
+  --font-display:'Alfa Slab One', Georgia, serif;
+  --font:'Barlow', system-ui, sans-serif;
+}
+
+.theme-basketball{
+  --accent:#f97316;  --accent-hover:#fb923c;  --accent-ink:#111;  --accent-soft:rgba(249,115,22,.16);
+  --overlay:rgba(20,10,4,.55);
+  --font-display:'Bebas Neue', Impact, sans-serif;
+  --font:'Barlow', system-ui, sans-serif;
+}
+
+.theme-football{
+  --accent:#22c55e;  --accent-hover:#4ade80;  --accent-ink:#052e16;  --accent-soft:rgba(34,197,94,.16);
+  --overlay:rgba(4,16,8,.55);
+  --font-display:'Teko', Impact, sans-serif;
+  --font:'Barlow', system-ui, sans-serif;
+}
