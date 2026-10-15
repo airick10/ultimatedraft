@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, abort, current_app, redirect, url_for, send_file
+from flask import Blueprint, render_template, request, abort, current_app, redirect, url_for, send_file, Response
 from .ai import ai_select_bb, ai_select_bk, ai_select_fb, parse_salary, to_float, open_position_lottery_bk, make_cap_checker
 from .services import (
     load_baseball,
@@ -44,16 +44,20 @@ from .services import (
     assign_picks_to_slots_bk,
     assign_picks_to_slots_fb,
     delete_saved_draft,
-    TWO_WAY_BB,
-    TWO_WAY_FB
+    twin_map_for,
+    twin_report,
+    duplicate_id_report,
+    add_twins
 )
 from datetime import datetime
 from .exports import (
     build_bb_workbook, build_bk_workbook, build_fb_workbook,
-    build_log_text, build_bb_report_context, build_bk_report_context, build_fb_report_context,
+    build_log_text, build_bb_report_context, build_bk_report_context, build_fb_report_context, build_team_records
 )
 import random
 import io
+import re
+from .cap import salary_of
 from collections import Counter
 import json
 from pathlib import Path
@@ -71,9 +75,10 @@ def index():
 
 @main.route("/baseball")
 def start_baseball():
-    #people = load_baseball()
     saved_drafts = get_saved_baseball_drafts()
-    return render_template("baseball.html", saved_drafts=saved_drafts)
+    cap_default, cap_options = cap_choices('bb')
+    return render_template("baseball.html", saved_drafts=saved_drafts,
+                           cap_default=cap_default, cap_options=cap_options)
 
 @main.route("/show_bb_logos")
 def show_bb_logos():
@@ -158,6 +163,7 @@ def bb_load():
         draft_file=str(draft_data.get("player_path", "")),
         sport='bb',
         current_team=current_team,
+        url_by_id=drafted_urls(players, "BaseballReferenceURL"),
         current_pick=meta['current_pick'],
         current_team_type=current_team_type,
     )
@@ -207,6 +213,7 @@ def bb_confirm():
             p for p in all_players
             if str(p.get("ID")) in selected_id_set or str(p.get("id")) in selected_id_set
         ]
+        people = add_twins(people, all_players, "bb")
 
         mode = "final_confirm"
 
@@ -308,6 +315,7 @@ def bb_draft():
         current_team=current_team,
         current_pick=meta['current_pick'],
         current_team_type=current_team_type,
+        url_by_id=drafted_urls(output_path, "BaseballReferenceURL"),
         sport="bb"
     )
 
@@ -350,7 +358,14 @@ def bb_report(draftname):
     if not (Path("drafts") / f"{draftname}_bb.json").exists():
         abort(404, "Draft not found.")
 
-    html = render_template("report.html", **build_bb_report_context(draftname))
+    context = build_bb_report_context(draftname)
+    for t in context["teams"]:       # full addresses, so the links also work from a saved copy of the report
+        t["json_urls"] = {
+            kind: url_for("main.bb_team_json", draftname=draftname, team_id=t["team_id"], kind=kind, _external=True)
+            for kind in ("hitters", "pitchers")
+        }
+
+    html = render_template("report.html", **context)
     if request.args.get("view") == "1":      # ?view=1 shows it in the browser instead of downloading
         return html
 
@@ -362,12 +377,36 @@ def bb_report(draftname):
         mimetype="text/html",
     )
 
+
+@main.route("/bb_team_json/<draftname>/<int:team_id>/<kind>")
+def bb_team_json(draftname, team_id, kind):
+    """One team's drafted hitters or pitchers as a JSON file shaped like the source data files."""
+    if Path(draftname).name != draftname:
+        abort(400, "Bad draft name.")
+    if kind not in ("hitters", "pitchers"):
+        abort(404)
+    if not (Path("drafts") / f"{draftname}_bb.json").exists():
+        abort(404, "Draft not found.")
+    team = get_team_by_id(load_baseball_meta(draftname), team_id)
+    if not team:
+        abort(404, "Team not found.")
+
+    records = build_team_records(draftname, team_id, kind)
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{draftname}_{team['team_name']}_{kind}")
+    return Response(
+        json.dumps(records, indent=2, ensure_ascii=False),
+        mimetype="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{safe}.json"'},
+    )
+
 #-------- BASKETBALL -----------------------------------------------------------------
 
 @main.route("/basketball")
 def start_basketball():
     saved_drafts = get_saved_basketball_drafts()
-    return render_template("basketball.html", saved_drafts=saved_drafts)
+    cap_default, cap_options = cap_choices('bk')
+    return render_template("basketball.html", saved_drafts=saved_drafts,
+                           cap_default=cap_default, cap_options=cap_options)
 
 
 @main.route("/show_bk_logos")
@@ -445,6 +484,7 @@ def bk_load():
         draft_log=log,
         draft_file=str(draft_data.get("player_path", "")),
         current_team=current_team,
+        url_by_id=drafted_urls(players, "BasketballReferenceURL"),
         current_team_type=current_team_type,
         sport='bk'
     )
@@ -585,6 +625,7 @@ def bk_draft():
         draft_file=output_path,
         draft_log=draft_log,
         current_team=current_team,
+        url_by_id=drafted_urls(output_path, "BasketballReferenceURL"),
         current_team_type=current_team_type,
         sport="bk"
     )
@@ -646,7 +687,9 @@ def bk_report(draftname):
 @main.route("/football")
 def start_football():
     saved_drafts = get_saved_football_drafts()
-    return render_template("football.html", saved_drafts=saved_drafts)
+    cap_default, cap_options = cap_choices('fb')
+    return render_template("football.html", saved_drafts=saved_drafts,
+                           cap_default=cap_default, cap_options=cap_options)
 
 @main.route("/show_fb_logos")
 def show_fb_logos():
@@ -700,6 +743,7 @@ def fb_confirm():
             p for p in all_players
             if str(p.get("ID")) in selected_id_set or str(p.get("id")) in selected_id_set
         ]
+        people = add_twins(people, all_players, "fb")
 
         mode = "final_confirm"
 
@@ -798,6 +842,7 @@ def fb_load():
         draft_log=log,
         draft_file=str(draft_data.get("player_path", "")),
         current_team=current_team,
+        url_by_id=drafted_urls(players, "FootballReferenceURL"),
         current_team_type=current_team_type,
         sport='fb'
     )
@@ -881,6 +926,7 @@ def fb_draft():
         draft_file=output_path,
         draft_log=draft_log,
         current_team=current_team,
+        url_by_id=drafted_urls(output_path, "FootballReferenceURL"),
         current_team_type=current_team_type,
         sport="fb"
     )
@@ -1297,7 +1343,7 @@ def roster_labels_bb(players):
 def maybe_add_twin_bb(player, players, team, pick_num, log_path):
     """If the drafted player has a two-way twin, assign the twin to the same team.
     Returns the bonus log entry (not yet written to the log), or None."""
-    twin_id = TWO_WAY_BB.get(str(player.get('id')))
+    twin_id = twin_map_for('bb', players).get(str(player.get('id')))
     if not twin_id:
         return None
 
@@ -1346,7 +1392,7 @@ def log_export(sport, draftname):
 def maybe_add_twin_fb(player, players, team, pick_num):
     """Football two-way players (QB/WR, HB/TE, HB/WR): drafting one record drafts the other too.
     Returns the bonus log entry (not yet written to the log), or None."""
-    twin_id = TWO_WAY_FB.get(str(player.get('id')))
+    twin_id = twin_map_for('fb', players).get(str(player.get('id')))
     if not twin_id:
         return None
 
@@ -1393,6 +1439,67 @@ def human_cap_warning(sport, cap, team_id, log_path, players, player):
     return (f"Careful: after {name} you'd have {_money(w['left'])} left for your last {w['slots']} slot(s), "
             f"and the cheapest players still available cost {_money(w['reserve'])}. "
             f"That leaves almost no room.")
+
+CAP_EASE   = 1.35       # suggested cap = roster size x average salary x this (higher = easier)
+_CAP_CACHE = {}
+
+
+def _round2(v):
+    """Round to 2 significant figures, e.g. 117,562,500 -> 120,000,000."""
+    v = int(v)
+    if v < 100:
+        return v
+    mag = 10 ** (len(str(v)) - 2)
+    return int(round(v / mag) * mag)
+
+
+def suggested_cap(sport):
+    if sport in _CAP_CACHE:
+        return _CAP_CACHE[sport]
+    try:
+        if sport == 'bb':
+            groups = [load_hitters_json(), load_pitchers_json()]
+        elif sport == 'bk':
+            groups = [load_basketball_json(), load_basketball_defense_json()]
+        else:
+            groups = [load_football_passing_json(), load_football_rushing_json(),
+                      load_football_receiving_json(), load_football_def_ol_json(),
+                      load_football_special_json()]
+        salaries = [s for g in groups for s in (salary_of(p) for p in g.values()) if s > 0]
+    except Exception:
+        return 0                      # data not reachable right now: no suggestion (and not cached)
+    if not salaries:
+        return 0
+    result = _round2(ROSTER_SIZE[sport] * (sum(salaries) / len(salaries)) * CAP_EASE)
+    _CAP_CACHE[sport] = result
+    return result
+
+
+def cap_choices(sport):
+    base = suggested_cap(sport)
+    if not base:
+        return 0, []
+    return base, [("Tight", _round2(base * 0.8)), ("Suggested", base), ("Loose", _round2(base * 1.25))]
+
+def drafted_urls(source, key):
+    """{player id: reference URL} for players already on a team (for the roster panel links).
+    source is the player list, or the path to the saved draft file."""
+    if isinstance(source, (str, Path)):
+        with open(source, "r", encoding="utf-8") as f:
+            source = json.load(f)
+    return {str(p.get("id")): p.get(key) for p in source if p.get("team_id", 0) != 0 and p.get(key)}
+
+@main.route("/twin_check/<sport>")
+def twin_check(sport):
+    """Open /twin_check/bb or /twin_check/fb to see how each listed two-way name matches up in your data."""
+    if sport == "bb":
+        players = load_baseball("full", 8)
+    elif sport == "fb":
+        players = load_football("full", 8)
+    else:
+        abort(404)
+    lines = twin_report(sport, players) + ["", "Duplicate-ID check on the JSON files:"] + duplicate_id_report(sport)
+    return "\n".join(lines), 200, {"Content-Type": "text/plain; charset=utf-8"}
 
 # ------ SOCKET IO CALLS -------
 

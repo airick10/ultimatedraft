@@ -7,10 +7,11 @@ shape once their position-eligibility rules are worked out.
 
 import random
 import math
+import re
 
 from .services import (
     assign_picks_to_slots_bb, assign_picks_to_slots_bk, assign_picks_to_slots_fb,
-    SHORT_POS_TO_SLOT_BB, SHORT_POS_TO_SLOT_FB, HB_FB_OVERFLOW, TWO_WAY_BB, TWO_WAY_FB
+    SHORT_POS_TO_SLOT_BB, SHORT_POS_TO_SLOT_FB, HB_FB_OVERFLOW, twin_map_for
 )
 from collections import Counter
 from .cap import CapChecker, CapRules, salary_of
@@ -348,9 +349,9 @@ def auto_select_pitcher_bb(position, hitters_pool, pitchers_pool, round_num, foc
 
 def ai_select_bb(team, roster_slots, team_picks, all_players, round_num, cap, salary_cap_enabled):
     """
-    Port of aipicks.py's aiSelect() for one team's single pick.
-    With a salary cap, only players the team can afford while still being able to finish
-    its roster under the cap are candidates. Returns a player id, or None.
+    One baseball AI pick. Order of business: tiered players first, then the archetype's normal pick,
+    with the salary cap, the UT variety rule and the L/R balance (s_bal) all narrowing the candidates.
+    Returns a player id, or None.
     """
     ai_focus = team.get('AIFocus', 1)
     config = AI_FOCUS_TABLE.get(ai_focus, AI_FOCUS_TABLE[1])
@@ -366,13 +367,21 @@ def ai_select_bb(team, roster_slots, team_picks, all_players, round_num, cap, sa
         affordable = [p for p in undrafted if checker.feasible(p)]
     else:
         affordable = undrafted
-    avg_salary = float('inf')          # the cap checker replaces the old late-round "budget mode"
+    avg_salary = float('inf')
+
     # tiered players first (tier 1, then tier 2), as long as they fit an open slot
     pick = tier_pick(affordable, tier_group_bb, tier_open_groups_bb(open_counts))
     if pick is not None:
         return pick
 
-    def attempt(variety):
+    # handedness balance: where this team's hitters and pitchers lean (L positive, R negative)
+    mine  = [p for p in all_players if p.get('team_id', 0) == team['team_id']]
+    net_h = sum(balance_lean(p) for p in mine if p.get('kind') == 'hitter')
+    net_p = sum(balance_lean(p) for p in mine if p.get('kind') == 'pitcher')
+    lean  = team_lean_bb(team)
+    respect_balance = random.random() < BAL_STRICTNESS
+
+    def attempt(variety, balanced):
         pc = pos_counts if variety else None
         hitters_pool = [
             p for p in affordable
@@ -382,6 +391,10 @@ def ai_select_bb(team, roster_slots, team_picks, all_players, round_num, cap, sa
             p for p in affordable
             if p.get('kind') == 'pitcher' and fits_open_slots_bb(p, open_counts, pc, base_slots)
         ]
+        if balanced:
+            hitters_pool  = balance_pool(hitters_pool, net_h, lean)
+            pitchers_pool = balance_pool(pitchers_pool, net_p, lean)
+
         if config['mode'] == 'H':
             pick = auto_select_hitter_bb(position, hitters_pool, pitchers_pool, round_num, config['focus'], config['keys'], avg_salary)
         else:
@@ -393,9 +406,11 @@ def ai_select_bb(team, roster_slots, team_picks, all_players, round_num, cap, sa
             pick = ai_select_snippet_bb(pool, -1, 0, avg_salary)
         return pick
 
-    pick = attempt(True)
+    pick = attempt(True, respect_balance)
+    if pick is None and respect_balance:
+        pick = attempt(True, False)          # balance is the first rule to bend
     if pick is None:
-        pick = attempt(False)          # only break the UT variety rule if there's no other option
+        pick = attempt(False, False)         # then the UT variety rule
 
     # last resort (a team that can no longer make the cap): the cheapest player who fits an open slot
     if pick is None:
@@ -763,7 +778,6 @@ CAP_RULES = {
         ],
     ),
 }
-TWIN_MAPS = {'bb': TWO_WAY_BB, 'bk': {}, 'fb': TWO_WAY_FB}
 _ASSIGN   = {'bb': assign_picks_to_slots_bb, 'bk': assign_picks_to_slots_bk, 'fb': assign_picks_to_slots_fb}
 
 
@@ -778,7 +792,7 @@ def make_cap_checker(sport, roster_slots, team_picks, all_players, team_id, cap,
     spent = sum(salary_of(p) for p in all_players if p.get('team_id', 0) == team_id)
     return CapChecker(
         CAP_RULES[sport], pool, open_slot_labels(sport, roster_slots, team_picks),
-        spent, parse_salary(cap), twin_map=TWIN_MAPS[sport], safety=safety,
+        spent, parse_salary(cap), twin_map=twin_map_for(sport, all_players), safety=safety,
     )
 
 # ============================================================
@@ -803,3 +817,57 @@ def tier_group_bk(p):
 
 def tier_group_fb(p):
     return SHORT_POS_TO_SLOT_FB.get(p.get('short_pos', ''), '')
+
+# ============================================================
+# HANDEDNESS BALANCE (s_bal)
+# ============================================================
+# s_bal looks like '6L', '4R', '1L', 'E'. The letter is the side the player is strong against
+# (a 6L hitter crushes lefty pitchers, a 4R pitcher dominates righty hitters) and the number is how
+# lopsided he is. 1L, 1R and E are good both ways. A player scores +n for L, -n for R, 0 for E, and a
+# team's hitters (and pitchers) are kept near zero unless the team has its own L or R lean.
+
+BAL_TOLERANCE  = 8      # how far a team's hitters (or pitchers) may lean to one side
+BAL_STRICTNESS = 0.85   # share of picks that respect balance; the rest ignore it, for variety
+LEAN_STICK     = 0.70   # how often an L or R leaning team sticks to its side
+
+
+def parse_balance(raw):
+    m = re.match(r'\s*(\d)\s*([LR])', str(raw or '').upper())
+    if not m:
+        return 0                              # 'E' or missing: even
+    n = int(m.group(1))
+    return n if m.group(2) == 'L' else -n
+
+
+def balance_lean(p):
+    return parse_balance(p.get('s_bal', p.get('b_bal')))
+
+
+def team_lean_bb(team):
+    """None = balanced; 'L' or 'R' = this team likes that side. Set "Lean" in the meta file to force one
+    ('L', 'R' or 'B'); otherwise it's derived from the team's id, so it stays the same all draft."""
+    pref = team.get('Lean')
+    if pref in ('L', 'R'):
+        return pref
+    if pref == 'B':
+        return None
+    k = (int(team.get('AIFocus', 1)) * 7 + int(team.get('team_id', 0)) * 3) % 5
+    return ('L', 'R', None, None, None)[k]
+
+
+def balance_pool(pool, net, lean):
+    """Keep the players that fit this team's lean. Falls back to the full pool if that leaves nobody."""
+    stick = random.random() < LEAN_STICK
+    keep = []
+    for p in pool:
+        s = balance_lean(p)
+        new = net + s
+        if lean is None:
+            ok = abs(new) <= BAL_TOLERANCE
+        elif lean == 'L':
+            ok = new >= -BAL_TOLERANCE and (s >= 0 or not stick)
+        else:
+            ok = new <= BAL_TOLERANCE and (s <= 0 or not stick)
+        if ok:
+            keep.append(p)
+    return keep or pool

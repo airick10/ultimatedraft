@@ -1,6 +1,7 @@
 from flask import Flask
 import json
 import random
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from functools import lru_cache
@@ -35,31 +36,19 @@ FOOTBALL_POS_MAP = {
 
 
 # Two-way players: (hitter JSON ID, pitcher JSON ID). Drafting either side drafts both.
-TWO_WAY_PAIRS_BB = [
-    (390, 277),    # Shohei Ohtani
-    (462, 340),    # Babe Ruth
-    (599, 447),    # Rick Ankiel
-    (454, 326),    # Bullet Joe Rogan
-    (156, 86),     # Martin Dihigo
-    (371, 249)     # José Méndez
+TWO_WAY_NAMES_BB = [
+    "Babe Ruth",
+    "Shohei Ohtani",
+    "Bullet Rogan",
+    # add the rest
 ]
 
-TWO_WAY_BB = {}
-for _h, _p in TWO_WAY_PAIRS_BB:
-    TWO_WAY_BB[f"h_{_h}"] = f"p_{_p}"
-    TWO_WAY_BB[f"p_{_p}"] = f"h_{_h}"
-
-
-TWO_WAY_PAIRS_FB = [
-    ("qb_127", "wr_245"),     # Kordell Stewart
-    ("hb_134", "wr_229"),     # Deebo Samuel
-    ("hb_24", "wr_8"),     # Billy Cannon
+TWO_WAY_NAMES_FB = [
+    "Kordell Stewart",     # QB / WR
+    "Billy Cannon",        # HB / TE
+    "Deebo Samuel",        # HB / WR
+    # add the rest
 ]
-
-TWO_WAY_FB = {}
-for _a, _b in TWO_WAY_PAIRS_FB:
-    TWO_WAY_FB[_a] = _b
-    TWO_WAY_FB[_b] = _a
 
 def _read_json(src: str):
     if src.startswith("http://") or src.startswith("https://"):
@@ -140,10 +129,20 @@ def delete_saved_draft(filename, sport):
     (draft_dir / f"{draftname}_{sport}_log.json").unlink(missing_ok=True)
 
 
+def short_hand(value):
+    """'Left' -> 'L', 'Right' -> 'R', 'Switch' -> 'S' (anything else is left alone)."""
+    text = str(value or "").strip()
+    return text[:1].upper() if text[:1].upper() in ("L", "R", "S") else text
+
 def load_baseball(pool, num_teams):
     """Combine hitters and pitchers into a single sorted LIST."""
     hitters  = load_hitters_json()
     pitchers = load_pitchers_json()
+
+    for rec in list(hitters.values()) + list(pitchers.values()):
+        for key in ("Bats", "Throws"):
+            if key in rec:
+                rec[key] = short_hand(rec[key])
 
     if pool == "full" or pool == "custom":
         people = []
@@ -214,6 +213,13 @@ def load_baseball(pool, num_teams):
             random.sample(sp,    min(num_sp, len(sp)))    +
             random.sample(rp,    min(num_rp, len(rp)))
         )
+
+        # a two-way player's other record always comes along, so both his hitter and pitcher versions are in the pool
+        universe = (
+            [{"kind": "hitter",  "short_pos": compute_short_pos("hitter", h),  "id": f"h_{_id}", **h} for _id, h in hitters.items()] +
+            [{"kind": "pitcher", "short_pos": compute_short_pos("pitcher", p), "id": f"p_{_id}", **p} for _id, p in pitchers.items()]
+        )
+        people = add_twins(people, universe, "bb")
 
     people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
     return people
@@ -749,6 +755,18 @@ def load_football(pool, num_teams):
             random.sample(kp, min(num_kp, len(kp)))
         )
 
+         # a two-way player's other record always comes along
+        universe = []
+        for _id, p in passers.items():
+            universe.append({"kind": "passer", "short_pos": "QB", "id": f"qb_{_id}", **p})
+        for _id, h in rushers.items():
+            universe.append({"kind": "rusher", "short_pos": normalize_football_pos(h.get("Positions", "HB"), default='HB'),
+                             "id": f"hb_{_id}", **h})
+        for _id, r in receivers.items():
+            universe.append({"kind": "receiver", "short_pos": normalize_football_pos(r.get("Positions", "WR"), default='WR'),
+                             "id": f"wr_{_id}", **r})
+        people = add_twins(people, universe, "fb")
+
     people.sort(key=lambda r: (r.get("LastName", ""), r.get("FirstName", "")))
     return people
 
@@ -1185,3 +1203,97 @@ def assign_picks_to_slots_fb(roster_slots, team_picks):
             assigned[target] = pick
 
     return assigned
+
+
+def norm_name(s):
+    """Lower-case, accent-free, single-spaced, so 'Álex  Rodríguez' matches 'alex rodriguez'."""
+    s = unicodedata.normalize("NFD", str(s or "")).encode("ascii", "ignore").decode()
+    return " ".join(s.lower().split())
+
+
+def _record_name(p):
+    return norm_name(f"{p.get('FirstName', '')} {p.get('LastName', '')}")
+
+
+def build_twin_map(players, names, kinds):
+    """{player id: twin player id} for the listed two-way names."""
+    wanted = {norm_name(n) for n in names}
+    by_name = {}
+    for p in players:
+        if p.get("kind") not in kinds:
+            continue
+        key = _record_name(p)
+        if key in wanted:
+            by_name.setdefault(key, []).append(p)
+
+    twins = {}
+    for recs in by_name.values():
+        if len(recs) == 2 and recs[0].get("kind") != recs[1].get("kind"):
+            a, b = str(recs[0].get("id")), str(recs[1].get("id"))
+            twins[a] = b
+            twins[b] = a
+    return twins
+
+
+def twin_map_for(sport, players):
+    if sport == "bb":
+        return build_twin_map(players, TWO_WAY_NAMES_BB, ("hitter", "pitcher"))
+    if sport == "fb":
+        return build_twin_map(players, TWO_WAY_NAMES_FB, ("passer", "rusher", "receiver"))
+    return {}
+
+def add_twins(people, universe, sport):
+    """Random / Custom pools: if one record of a two-way player made the pool, add his other record too.
+    universe = every record for the sport (used to find the twin)."""
+    twins = twin_map_for(sport, universe)
+    have  = {str(p.get("id")) for p in people}
+    by_id = {str(p.get("id")): p for p in universe}
+    extra = []
+    for pid in list(have):
+        tid = twins.get(pid)
+        if tid and tid not in have and tid in by_id:
+            extra.append(by_id[tid])
+            have.add(tid)
+    return people + extra
+
+
+def twin_report(sport, players):
+    """Plain-text check of how each listed two-way name matches up in the data."""
+    if sport == "bb":
+        names, kinds = TWO_WAY_NAMES_BB, ("hitter", "pitcher")
+    else:
+        names, kinds = TWO_WAY_NAMES_FB, ("passer", "rusher", "receiver")
+    twins = build_twin_map(players, names, kinds)
+    lines = []
+    for name in names:
+        key = norm_name(name)
+        recs = [p for p in players if p.get("kind") in kinds and _record_name(p) == key]
+        detail = ", ".join(f"{p.get('kind')} {p.get('id')} ({p.get('short_pos', '')})" for p in recs) or "no records found"
+        ok = any(str(p.get("id")) in twins for p in recs)
+        lines.append(f"{'OK     ' if ok else 'PROBLEM'}  {name}: {detail}")
+    return lines
+
+
+def duplicate_id_report(sport):
+    """Counts records that share an ID. The loader keeps only one record per ID, so duplicates make players vanish."""
+    if sport == "bb":
+        files = [("batters", input_file_baseball_hitters), ("pitchers", input_file_baseball_pitchers)]
+    else:
+        files = [("passing", input_file_football_passing), ("rushing", input_file_football_rushing),
+                 ("receiving", input_file_football_receiving), ("def/ol", input_file_football_def_ol),
+                 ("special", input_file_football_special)]
+    lines = []
+    for label, url in files:
+        try:
+            data = _read_json(url)
+        except Exception as exc:
+            lines.append(f"{label}: could not read ({exc})")
+            continue
+        if not isinstance(data, list):
+            lines.append(f"{label}: not a list, skipped")
+            continue
+        ids = [str(r.get("ID") or r.get("_id") or r.get("id")) for r in data]
+        dupes = [i for i, n in Counter(ids).items() if n > 1]
+        extra = f"  (e.g. {', '.join(dupes[:5])})" if dupes else ""
+        lines.append(f"{label}: {len(data)} records, {len(dupes)} duplicate IDs{extra}")
+    return lines

@@ -20,7 +20,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from .ai import parse_salary
-from .services import load_baseball_meta, load_basketball_meta, load_football_meta
+from .services import load_baseball_meta, load_basketball_meta, load_football_meta, unit_label
 
 from urllib.parse import quote
 
@@ -458,7 +458,7 @@ def _fb_cell_value(key, player, name_mode):
         return player.get("TM") or player.get("Team")
     if key == "__name__":
         if name_mode == "team":
-            return f"{player.get('Year', '')} {player.get('Team', '')}".strip()
+            return unit_label(player) or str(player.get("name") or "")
         last    = (player.get("LastName") or "").strip()
         initial = (player.get("FirstName") or "").strip()[:1].upper()
         return f"{last},{initial}"
@@ -601,7 +601,7 @@ def _col(header, key, style="auto", strong=False):
     def get(p):
         v = _to_float(p.get(key))
         return (_fmt(v, style), v) if v is not None else ("—", None)
-    return {"h": header, "kind": "num", "get": get, "strong": strong}
+    return {"h": header, "kind": "num", "get": get, "strong": strong, "style": style}
 
 
 def _mixed(header, key, alt=None, kind="num", strong=False):
@@ -615,7 +615,7 @@ def _mixed(header, key, alt=None, kind="num", strong=False):
             return (_fmt(v, "auto"), v)
         text = str(raw).strip() if raw is not None else ""
         return (text or "—", text.lower() or None)
-    return {"h": header, "kind": kind, "get": get, "strong": strong}
+    return {"h": header, "kind": kind, "get": get, "strong": strong, "style": "auto"}
 
 
 def _hand(header, key):
@@ -629,7 +629,7 @@ def _salary(header="Salary"):
     def get(p):
         v = parse_salary(p.get("s_sal") or p.get("Salary"))
         return (_fmt(v, "money"), v) if v > 0 else ("—", None)
-    return {"h": header, "kind": "num", "get": get, "strong": False}
+    return {"h": header, "kind": "num", "get": get, "strong": False, "style": "money"}
 
 
 def _wl(header="W-L"):
@@ -716,13 +716,11 @@ def _report_row(columns, p, logo_dir=None, url_key="BaseballReferenceURL", team_
     cells = []
     for col in columns:
         if col["kind"] == "name":
-            if col.get("unit"):                          # football lines / special teams: "1985 CHI"
-                name = f"{p.get('Year', '')} {p.get('Team', '')}".strip()
-                url = ""
+            if col.get("unit"):                  # football lines / special teams, basketball defenses: "1985 CHI"
+                name = unit_label(p) or str(p.get("name") or "").strip()
             else:
-                name = f"{p.get('FirstName', '')} {p.get('LastName', '')}".strip()
-                url = p.get(url_key) or ""
-            cells.append({"kind": "name", "text": name, "sort": name.lower(), "url": url})
+                name = f"{p.get('FirstName', '')} {p.get('LastName', '')}".strip() or str(p.get("name") or "").strip()
+            cells.append({"kind": "name", "text": name, "sort": name.lower(), "url": p.get(url_key) or ""})
         elif col["kind"] == "team":
             logo, code = _logo_url(p.get(team_key), logo_dir)
             if not code and team_key != "Team":          # no value for that key: fall back to plain Team
@@ -770,49 +768,6 @@ def _team_meta_line(parts, payroll, cap):
         parts.append(text)
     return " · ".join(parts)
 
-
-def build_bb_report_context(draftname):
-    meta, players, pick_order = _load_draft(draftname, "bb")
-    cap = parse_salary(meta.get("cap"))
-    used = set()
-    teams = []
-
-    for team in meta["teams"]:
-        mine = [p for p in players if p.get("team_id", 0) == team["team_id"]]
-        mine.sort(key=lambda p: pick_order.get(str(p.get("id")), 10**9))
-        hitters  = [p for p in mine if p.get("kind") == "hitter"]
-        pitchers = [p for p in mine if p.get("kind") == "pitcher"]
-        payroll  = sum(parse_salary(p.get("s_sal") or p.get("Salary")) for p in mine)
-        name     = team["team_name"]
-
-        teams.append({
-            "name":     name,
-            "slug":     "team-" + _slug(name, used),
-            "is_human": team.get("type") == "human",
-            "logo":     f"{LOGO_ROOT}/fictional/baseball/{quote(name)}_bb.png",
-            "meta":     _team_meta_line([f"{len(hitters)} hitters", f"{len(pitchers)} pitchers"], payroll, cap),
-            "sections": [
-                {"cls": "real", "title": "Real Stats", "tables": [
-                    {"label": "Hitters",  "cols": _head(REAL_HIT_COLS),
-                     "rows": [_report_row(REAL_HIT_COLS, p) for p in hitters]},
-                    {"label": "Pitchers", "cols": _head(REAL_PIT_COLS),
-                     "rows": [_report_row(REAL_PIT_COLS, p) for p in pitchers]},
-                ]},
-                {"cls": "strat", "title": "Strat-O-Matic Ratings", "tables": [
-                    {"label": "Hitters",  "cols": _head(STRAT_HIT_COLS),
-                     "rows": [_report_row(STRAT_HIT_COLS, p) for p in hitters]},
-                    {"label": "Pitchers", "cols": _head(STRAT_PIT_COLS),
-                     "rows": [_report_row(STRAT_PIT_COLS, p) for p in pitchers]},
-                ]},
-            ],
-        })
-
-    return {
-        "title":       draftname,
-        "sport_label": "Baseball",
-        "generated":   datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "teams":       teams,
-    }
 
 # ---------- basketball HTML report ----------
 
@@ -869,44 +824,6 @@ BK_STRAT_COLS = [
 ]
 
 
-def build_bk_report_context(draftname):
-    meta, players, pick_order = _load_draft(draftname, "bk")
-    cap = parse_salary(meta.get("cap"))
-    used = set()
-    teams = []
-
-    for team in meta["teams"]:
-        mine = [p for p in players if p.get("team_id", 0) == team["team_id"]]
-        mine.sort(key=lambda p: pick_order.get(str(p.get("id")), 10**9))
-        payroll = sum(parse_salary(p.get("Salary")) for p in mine)
-        name    = team["team_name"]
-
-        def rows(cols):
-            return [_report_row(cols, p, BK_SEAL_DIR, "BasketballReferenceURL", "Team_Logo") for p in mine]
-
-        teams.append({
-            "name":     name,
-            "slug":     "team-" + _slug(name, used),
-            "is_human": team.get("type") == "human",
-            "logo":     f"{LOGO_ROOT}/fictional/basketball/{quote(name)}_bk.png",
-            "meta":     _team_meta_line([f"{len(mine)} players"], payroll, cap),
-            "sections": [
-                {"cls": "real", "title": "Real Stats", "tables": [
-                    {"label": "", "cols": _head(BK_REAL_COLS), "rows": rows(BK_REAL_COLS)},
-                ]},
-                {"cls": "strat", "title": "Strat-O-Matic Ratings", "tables": [
-                    {"label": "", "cols": _head(BK_STRAT_COLS), "rows": rows(BK_STRAT_COLS)},
-                ]},
-            ],
-        })
-
-    return {
-        "title":       draftname,
-        "sport_label": "Basketball",
-        "generated":   datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "teams":       teams,
-    }
-
 # ---------- football HTML report ----------
 
 FB_SEAL_DIR = f"{LOGO_ROOT}/football"     # logos for the TM code on player rows
@@ -935,7 +852,7 @@ def _fcol(header, key, alt=None, kind="num"):
         text = str(raw).strip() if raw is not None else ""
         return (text or "—", text.lower() or None)
 
-    return {"h": header, "kind": kind, "get": get, "strong": False}
+    return {"h": header, "kind": kind, "get": get, "strong": False, "style": "auto3"}
 
 
 POS_COL        = _fcol("Position", "Positions", kind="text")
@@ -1011,6 +928,244 @@ FB_REPORT_GROUPS = [
 ]
 
 
+# ---------- per-team JSON (baseball) ----------
+
+APP_FIELDS = ("kind", "short_pos", "id", "team_id")    # fields the app adds; the source JSON files don't have them
+
+
+def build_team_records(draftname, team_id, kind):
+    """A team's drafted hitters or pitchers as plain records, shaped like the source JSON files:
+    a list of records with the original ID and every original key, minus the app's own bookkeeping."""
+    draft_dir = Path("drafts")
+    with open(draft_dir / f"{draftname}_bb.json", "r", encoding="utf-8") as f:
+        players = json.load(f)
+
+    log = []
+    log_path = draft_dir / f"{draftname}_bb_log.json"
+    if log_path.exists():
+        with open(log_path, "r", encoding="utf-8") as f:
+            log = json.load(f)
+    pick_order = {str(e["id"]): i for i, e in enumerate(log)}
+
+    want = "hitter" if kind == "hitters" else "pitcher"
+    mine = [p for p in players if p.get("team_id", 0) == team_id and p.get("kind") == want]
+    mine.sort(key=lambda p: pick_order.get(str(p.get("id")), 10**9))
+    return [{k: v for k, v in p.items() if k not in APP_FIELDS} for p in mine]
+
+# ---------- totals / averages rows and the report builders ----------
+
+def _avg_map(headers):
+    return {h: "avg" for h in headers}
+
+
+def _num_at(row, i):
+    v = row[i].get("sort")
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def _foot_row(columns, rows, agg_map, label):
+    """Footer row for a table: sums for counting stats and weighted averages for rates (real stats),
+    plain averages for ratings (strat). Returns None for tables with fewer than two players."""
+    if not agg_map or len(rows) < 2:
+        return None
+    heads = [c["h"] for c in columns]
+    cells = []
+    for i, col in enumerate(columns):
+        agg   = agg_map.get(col["h"]) if i > 0 else None
+        style = col.get("style", "auto")
+        text  = label if i == 0 else ""
+
+        if agg == "sum":
+            vals = [v for v in (_num_at(r, i) for r in rows) if v is not None]
+            if vals:
+                text = _fmt(sum(vals), style)
+        elif agg == "avg":
+            vals = [v for v in (_num_at(r, i) for r in rows) if v is not None]
+            if vals:
+                text = _fmt(sum(vals) / len(vals), "d1")
+        elif agg == "wl":
+            wins = losses = 0
+            found = False
+            for r in rows:
+                m = re.match(r"\s*(\d+)\s*-\s*(\d+)", r[i]["text"])
+                if m:
+                    wins += int(m.group(1))
+                    losses += int(m.group(2))
+                    found = True
+            if found:
+                text = f"{wins}-{losses}"
+        elif agg == "pair":
+            pairs = [re.match(r"\s*(-?[\d.]+)\s*/\s*(-?[\d.]+)", r[i]["text"]) for r in rows]
+            pairs = [m for m in pairs if m]
+            if pairs:
+                o = sum(float(m.group(1)) for m in pairs) / len(pairs)
+                d = sum(float(m.group(2)) for m in pairs) / len(pairs)
+                text = f"{_fmt(o, 'd1')}/{_fmt(d, 'd1')}"
+        elif isinstance(agg, tuple) and agg[0] == "wavg" and agg[1] in heads:
+            w_i = heads.index(agg[1])
+            num = den = 0.0
+            for r in rows:
+                v, w = _num_at(r, i), _num_at(r, w_i)
+                if v is not None and w:
+                    num += v * w
+                    den += w
+            if den:
+                text = _fmt(num / den, style)
+
+        cells.append({"kind": "name" if i == 0 else col["kind"], "text": text})
+    return cells
+
+
+def _table(label, cols, group, agg_map, foot_label, **row_kw):
+    rows = [_report_row(cols, p, **row_kw) for p in group]
+    return {"label": label, "cols": _head(cols), "rows": rows,
+            "foot": _foot_row(cols, rows, agg_map, foot_label)}
+
+
+# ---- what gets totalled (real stats) or averaged (strat), by column header ----
+
+REAL_HIT_AGG = {
+    "AB": "sum", "H": "sum", "2B": "sum", "3B": "sum", "HR": "sum", "RBI": "sum", "R": "sum",
+    "SB": "sum", "CS": "sum", "TB": "sum",
+    "Avg": ("wavg", "AB"), "OBP": ("wavg", "AB"), "SLG": ("wavg", "AB"), "OPS": ("wavg", "AB"),
+    "WAR": "sum", "Salary": "sum",
+}
+REAL_PIT_AGG = {
+    "IP": "sum", "W-L": "wl", "SV": "sum", "R": "sum", "ER": "sum", "H": "sum", "K": "sum", "BB": "sum",
+    "SHO": "sum", "CG": "sum",
+    "ERA": ("wavg", "IP"), "WHIP": ("wavg", "IP"), "FIP": ("wavg", "IP"),
+    "Hp9": ("wavg", "IP"), "HRp9": ("wavg", "IP"), "Kp9": ("wavg", "IP"), "BBp9": ("wavg", "IP"),
+    "WAR": "sum", "Salary": "sum",
+}
+STRAT_HIT_AVG = _avg_map(["OBvL", "TBvL", "OBTBvL", "HRvL", "BPvL", "OBvR", "TBvR", "OBTBvR", "HRvR", "BPvR", "Speed"])
+STRAT_PIT_AVG = _avg_map(["OBvL", "TBvL", "OBTBvL", "HRvL", "BPvL", "OBvR", "TBvR", "OBTBvR", "HRvR", "BPvR"])
+
+BK_REAL_AGG = {
+    "FG": "sum", "FGA": "sum", "FG3": "sum", "FG3A": "sum", "FT": "sum", "FTA": "sum",
+    "RB": "sum", "Ast": "sum", "Pts": "sum",
+    "FG%": ("wavg", "FGA"), "3P%": ("wavg", "FG3A"), "FT%": ("wavg", "FTA"),
+    "PtspG": "sum", "RBpG": "sum", "AstpG": "sum", "Salary": "sum",
+}
+BK_STRAT_AVG = {
+    **{h: "pair" for h in ("LG-Reb", "RG-Reb", "LF-Reb", "RF-Reb", "C-Reb")},
+    **_avg_map(["Shoot", "Tend", "Block", "Omade", "Pmade", "Imade", "Fmade", "PassDazz", "FBPassDazz", "Dsteal"]),
+}
+
+_FB_REC_REAL  = {"Receptions": "sum", "RecYards": "sum", "RecTDs": "sum", "Salary": "sum"}
+_FB_REC_STRAT = _avg_map(["Run Block", "Pass Block", "Rec%", "Yds/Rec", "FlatPassCatches", "FlatPassYards",
+                          "ShortPassCatches", "ShortPassYards", "LongPassCatches", "LongPassYards"])
+FB_REAL_AGG = {
+    "Passers": {"Pass Attempts": "sum", "PassYards": "sum", "PassTDs": "sum", "Rushes": "sum", "RushYards": "sum",
+                "Completion%": ("wavg", "Pass Attempts"), "Int%": ("wavg", "Pass Attempts"), "Salary": "sum"},
+    "Rushers (HB / FB)": {"Rushes": "sum", "RushYards": "sum", "RushTDs": "sum", "Receptions": "sum",
+                          "RecYards": "sum", "RecTDs": "sum", "RushingAverage": ("wavg", "Rushes"), "Salary": "sum"},
+    "Tight Ends": _FB_REC_REAL,
+    "Wide Receivers": _FB_REC_REAL,
+}
+FB_STRAT_AVG = {
+    "Passers": _avg_map(["QBRating", "Completion%", "Yds/Attempt", "Int%", "Yds/MustRun", "Must Run",
+                         "ShortPassCompletion", "ShortPassYards", "LongPassCompletion", "LongPassYards"]),
+    "Rushers (HB / FB)": _avg_map(["Run Block", "Pass Block", "Yds/Rush", "Fum%", "LineBuck", "OffTable",
+                                   "End Run", "FlatPassCatches", "FlatPassYards", "ShortPassCatches"]),
+    "Tight Ends": _FB_REC_STRAT,
+    "Wide Receivers": _FB_REC_STRAT,
+}
+
+# basketball defense units get their own table (year + team, logo, their own ratings)
+BK_DEF_COLS = [
+    UNIT_NAME_COL, UNIT_LOGO_COL,
+    _mixed("Omade", "Omade"), _mixed("OT", "OT"), _mixed("Pmade", "Pmade"), _mixed("PDfoul", "PDfoul"),
+    _mixed("POFoul", "POFoul"), _mixed("PT", "PT"), _mixed("Imade", "Imade"), _mixed("Iopen", "Iopen"),
+    _mixed("Fmade", "Fmade"), _mixed("3made", "3made"),
+    _salary(),
+]
+
+
+# ---- the three builders ----
+
+def build_bb_report_context(draftname):
+    meta, players, pick_order = _load_draft(draftname, "bb")
+    cap = parse_salary(meta.get("cap"))
+    used = set()
+    teams = []
+
+    for team in meta["teams"]:
+        mine = [p for p in players if p.get("team_id", 0) == team["team_id"]]
+        mine.sort(key=lambda p: pick_order.get(str(p.get("id")), 10**9))
+        hitters  = [p for p in mine if p.get("kind") == "hitter"]
+        pitchers = [p for p in mine if p.get("kind") == "pitcher"]
+        payroll  = sum(parse_salary(p.get("s_sal") or p.get("Salary")) for p in mine)
+        name     = team["team_name"]
+
+        teams.append({
+            "name":     name,
+            "team_id":  team["team_id"],
+            "slug":     "team-" + _slug(name, used),
+            "is_human": team.get("type") == "human",
+            "logo":     f"{LOGO_ROOT}/fictional/baseball/{quote(name)}_bb.png",
+            "meta":     _team_meta_line([f"{len(hitters)} hitters", f"{len(pitchers)} pitchers"], payroll, cap),
+            "sections": [
+                {"cls": "real", "title": "Real Stats", "tables": [
+                    _table("Hitters",  REAL_HIT_COLS, hitters,  REAL_HIT_AGG, "Total"),
+                    _table("Pitchers", REAL_PIT_COLS, pitchers, REAL_PIT_AGG, "Total"),
+                ]},
+                {"cls": "strat", "title": "Strat-O-Matic Ratings", "tables": [
+                    _table("Hitters",  STRAT_HIT_COLS, hitters,  STRAT_HIT_AVG, "Average"),
+                    _table("Pitchers", STRAT_PIT_COLS, pitchers, STRAT_PIT_AVG, "Average"),
+                ]},
+            ],
+        })
+
+    return {
+        "title":       draftname,
+        "sport_label": "Baseball",
+        "generated":   datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "teams":       teams,
+    }
+
+
+def build_bk_report_context(draftname):
+    meta, players, pick_order = _load_draft(draftname, "bk")
+    cap = parse_salary(meta.get("cap"))
+    used = set()
+    teams = []
+
+    for team in meta["teams"]:
+        mine = [p for p in players if p.get("team_id", 0) == team["team_id"]]
+        mine.sort(key=lambda p: pick_order.get(str(p.get("id")), 10**9))
+        squad    = [p for p in mine if p.get("kind") != "defense"]
+        defenses = [p for p in mine if p.get("kind") == "defense"]
+        payroll  = sum(parse_salary(p.get("Salary")) for p in mine)
+        name     = team["team_name"]
+        kw = dict(logo_dir=BK_SEAL_DIR, url_key="BasketballReferenceURL", team_key="Team_Logo")
+
+        parts = [f"{len(squad)} players"] + ([f"{len(defenses)} defense"] if defenses else [])
+        strat_tables = [_table("Players" if defenses else "", BK_STRAT_COLS, squad, BK_STRAT_AVG, "Average", **kw)]
+        if defenses:
+            strat_tables.append(_table("Defense", BK_DEF_COLS, defenses, {}, "", **kw))
+
+        teams.append({
+            "name":     name,
+            "slug":     "team-" + _slug(name, used),
+            "is_human": team.get("type") == "human",
+            "logo":     f"{LOGO_ROOT}/fictional/basketball/{quote(name)}_bk.png",
+            "meta":     _team_meta_line(parts, payroll, cap),
+            "sections": [
+                {"cls": "real", "title": "Real Stats", "tables": [
+                    _table("", BK_REAL_COLS, squad, BK_REAL_AGG, "Total", **kw),
+                ]},
+                {"cls": "strat", "title": "Strat-O-Matic Ratings", "tables": strat_tables},
+            ],
+        })
+
+    return {
+        "title":       draftname,
+        "sport_label": "Basketball",
+        "generated":   datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "teams":       teams,
+    }
+
+
 def build_fb_report_context(draftname):
     meta, players, pick_order = _load_draft(draftname, "fb")
     cap = parse_salary(meta.get("cap"))
@@ -1029,15 +1184,10 @@ def build_fb_report_context(draftname):
         real_tables, strat_tables = [], []
         for label, selector, real_cols, strat_cols, style in FB_REPORT_GROUPS:
             group = [p for p in mine if selector(p)]
-            team_key, logo_dir = ("TM", FB_SEAL_DIR) if style == "person" else ("Team_Logo", FB_SEAL_DIR)
-            real_tables.append({
-                "label": label, "cols": _head(real_cols),
-                "rows": [_report_row(real_cols, p, logo_dir, "FootballReferenceURL", team_key) for p in group],
-            })
-            strat_tables.append({
-                "label": label, "cols": _head(strat_cols),
-                "rows": [_report_row(strat_cols, p, logo_dir, "FootballReferenceURL", team_key) for p in group],
-            })
+            kw = dict(logo_dir=FB_SEAL_DIR, url_key="FootballReferenceURL",
+                      team_key="TM" if style == "person" else "Team_Logo")
+            real_tables.append(_table(label, real_cols, group, FB_REAL_AGG.get(label), "Total", **kw))
+            strat_tables.append(_table(label, strat_cols, group, FB_STRAT_AVG.get(label), "Average", **kw))
 
         teams.append({
             "name":     name,
