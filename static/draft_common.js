@@ -17,6 +17,10 @@ let draftComplete    = false;
 let hasPicks         = DRAFT.hasPicks;
 let currentPick      = DRAFT.currentPick;
 
+// which position tab and stat view the player pool is showing
+let currentPos  = 'ALL';
+let currentStat = 'real';
+
 const SALARY_CAP  = parseFloat(DRAFT.cap) || 0;      // 0 = no cap
 const salaryById  = {};                               // player id -> salary
 const spentByTeam = {};                               // team name -> salary drafted so far
@@ -370,22 +374,58 @@ function lastNameKey(name) {
     return words[words.length - 1] || '';
 }
 
-function sortTable(col) {
+// the cells of a row (or header row) that are actually showing
+function visibleCells(row) {
+    return Array.from(row.cells).filter(c => c.style.display !== 'none');
+}
+
+// shows the right header row and column group (real / strat / all) for the current tab.
+// A sport opts in to an "All" layout by defining SPORT.headFor(pos) -> header row id.
+function applyColumns() {
+    const isAll = !!SPORT.headFor && currentPos === 'ALL';
+    const mode  = isAll ? 'all' : currentStat;
+
+    if (SPORT.headFor) {
+        const headId = SPORT.headFor(currentPos);
+        document.querySelectorAll('#tableHead tr').forEach(tr => {
+            tr.style.display = (tr.id === headId) ? '' : 'none';
+        });
+    }
+    ['real', 'strat', 'all'].forEach(g => {
+        document.querySelectorAll('.stat-' + g).forEach(el => {
+            el.style.display = (g === mode) ? '' : 'none';
+        });
+    });
+
+    // nothing to toggle on the All tab
+    const sv = document.getElementById('statView');
+    if (sv) sv.style.display = isAll ? 'none' : '';
+
+    // a sport with a narrow All tab (football) packs it to the left instead of stretching it
+    const pane = document.querySelector('.pane-center');
+    if (pane) pane.classList.toggle('all-compact', isAll && !!SPORT.compactAll);
+}
+
+// sortTable(this) from a <th>, or sortTable(3) with a plain visible-column number
+function sortTable(arg) {
     const tbody = document.getElementById('playerBody');
-    const rows = Array.from(tbody.querySelectorAll('tr'));
+    const rows  = Array.from(tbody.querySelectorAll('tr'));
+    const col   = (typeof arg === 'number') ? arg : visibleCells(arg.parentElement).indexOf(arg);
+    if (col < 0) return;
     sortDir[col] = !sortDir[col];
-    // sort by the cells that are actually showing (real-stat and strat-stat cells swap places)
-    const cell = row => Array.from(row.cells).filter(c => c.style.display !== 'none')[col];
+
+    const text = row => { const c = visibleCells(row)[col]; return c ? c.innerText.trim() : ''; };
+    const num  = v => parseFloat(v.replace(/[$,]/g, ''));          // handles "$11,150,000"
+
     rows.sort((a, b) => {
-        let aVal = cell(a).innerText.trim();
-        let bVal = cell(b).innerText.trim();
+        const aVal = text(a), bVal = text(b);
         if (col === 1) {
             const c = lastNameKey(aVal).localeCompare(lastNameKey(bVal)) || aVal.localeCompare(bVal);
             return sortDir[col] ? c : -c;
         }
         if (col >= 3) {
-            const x = parseFloat(aVal), y = parseFloat(bVal);
-            if (isNaN(x) && isNaN(y)) {                       // text columns (like Bats / Throws)
+            const x = num(aVal), y = num(bVal);
+            if (isNaN(x) && isNaN(y)) {                            // text columns (Bats / Throws / Balance)
                 return sortDir[col] ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
             }
             return sortDir[col] ? (x || 0) - (y || 0) : (y || 0) - (x || 0);
@@ -393,15 +433,20 @@ function sortTable(col) {
         return sortDir[col] ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
     });
     rows.forEach(r => tbody.appendChild(r));
-    document.querySelectorAll('.sort-icon').forEach((el, i) => {
-        el.textContent = i === col ? (sortDir[col] ? '↑' : '↓') : '↕';
-    });
+
+    // sort arrows, only on the header row that's showing
+    const head = Array.from(document.querySelectorAll('#tableHead tr, thead tr')).find(r => r.style.display !== 'none');
+    if (head) {
+        visibleCells(head).forEach((th, i) => {
+            const icon = th.querySelector('.sort-icon');
+            if (icon) icon.textContent = i === col ? (sortDir[col] ? '↑' : '↓') : '↕';
+        });
+    }
 }
 
 function switchStatView(view) {
-    const showReal = view === 'real';
-    document.querySelectorAll('.stat-real').forEach(el => { el.style.display = showReal ? '' : 'none'; });
-    document.querySelectorAll('.stat-strat').forEach(el => { el.style.display = showReal ? 'none' : ''; });
+    currentStat = view;
+    applyColumns();
 }
 
 
@@ -539,6 +584,14 @@ document.addEventListener('DOMContentLoaded', () => {
     scrollLogToBottom();
     if (SPORT.onReady) SPORT.onReady();
 
+    // baseball and football open on the All tab with every row showing (basketball keeps its DEF rows hidden)
+    if (SPORT.headFor) {
+        document.querySelectorAll('#playerBody tr').forEach(row => { row.style.display = ''; });
+    }
+    const sv = document.getElementById('statView');
+    if (sv) currentStat = sv.value;                      // in case the browser remembered the dropdown
+    applyColumns();
+
     // show the roster of the team on the clock (the server syncs again right after connecting)
     if (document.getElementById(`roster-${DRAFT.currentTeam}`)) {
         showRoster(DRAFT.currentTeam);
@@ -547,14 +600,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (first) first.style.display = 'block';
     }
 
-    // click a player row to select him
+    // click a player row to select him (uses only the columns that are showing)
     document.querySelectorAll('#playerBody tr').forEach(row => {
         row.addEventListener('click', () => {
             selectedPlayerId = row.dataset.id;
-            const cells = row.cells;
-            document.getElementById('selectedName').textContent  = `${cells[0].innerText} — ${cells[1].innerText}`;
-            document.getElementById('selectedStats').textContent =
-                `${cells[2].innerText} | ${cells[3].innerText} / ${cells[4].innerText} / ${cells[5].innerText}`;
+            const c = visibleCells(row).map(td => td.innerText.trim());
+            const isAll = !!SPORT.headFor && currentPos === 'ALL';
+            const stats = c.slice(3, isAll ? 7 : 6).filter(t => t && t !== '—');
+            document.getElementById('selectedName').textContent  = `${c[0]} — ${c[1]}`;
+            document.getElementById('selectedStats').textContent = stats.length ? `${c[2]} | ${stats.join(' / ')}` : c[2];
             document.getElementById('draftBtn').style.display = 'inline-block';
             document.querySelectorAll('#playerBody tr').forEach(r => r.classList.remove('selected-row'));
             row.classList.add('selected-row');

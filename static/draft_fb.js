@@ -1,6 +1,15 @@
 /* Football specifics. Loads before draft_common.js. */
 const HB_FB_OVERFLOW = { 'HB': 'FB', 'FB': 'HB' };
 
+const HEAD_FOR_POS_FB = {
+    ALL: 'all-head',
+    QB: 'passing-head',
+    HB: 'rushing-head',   FB: 'rushing-head',
+    TE: 'receiving-head', WR: 'receiving-head',
+    DO: 'oldl-head',
+    KP: 'special-head'
+};
+
 window.SPORT = {
     logoDir:     'football',
     logoCode:    'fb',
@@ -13,27 +22,18 @@ window.SPORT = {
         openSlot(root, label)
         || (HB_FB_OVERFLOW[label] ? openSlot(root, HB_FB_OVERFLOW[label]) : null)
         || openSlot(root, 'FLEX'),
+
+    headFor: pos => HEAD_FOR_POS_FB[pos],
+    compactAll: true,
 };
 
-// position buttons: each group of positions has its own column headers
+// position buttons: filter the rows, then swap the header and columns to match
 function filterPos(btn, pos) {
     document.querySelectorAll('.btn-pos').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-
-    const isAll      = (pos === 'ALL');
-    const isPasser   = (pos === 'QB');
-    const isRusher   = (pos === 'HB' || pos === 'FB');
-    const isReceiver = (pos === 'TE' || pos === 'WR');
-    const isOLDL     = (pos === 'DO');
-    const isSpecial  = (pos === 'KP');
-
-    document.getElementById('passing-head').style.display   = (isPasser || isAll) ? '' : 'none';
-    document.getElementById('rushing-head').style.display   = isRusher ? '' : 'none';
-    document.getElementById('receiving-head').style.display = isReceiver ? '' : 'none';
-    document.getElementById('oldl-head').style.display      = isOLDL ? '' : 'none';
-    document.getElementById('special-head').style.display   = isSpecial ? '' : 'none';
-
+    currentPos = pos;
     document.querySelectorAll('#playerBody tr').forEach(row => {
-        row.style.display = (isAll || row.dataset.pos === pos) ? '' : 'none';
+        row.style.display = (pos === 'ALL' || row.dataset.pos === pos) ? '' : 'none';
     });
+    applyColumns();
 }

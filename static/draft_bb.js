@@ -14,17 +14,20 @@ window.SPORT = {
         openSlot(root, label)
         || (label !== 'S' && label !== 'R' ? openSlot(root, 'UT') : null)
         || openSlot(root, 'FLEX'),
+
+    // which header row goes with which tab
+    headFor: pos => pos === 'ALL' ? 'all-head'
+                  : (pos === 'SP' || pos === 'RP') ? 'pitcher-head'
+                  : 'hitter-head',
 };
 
-// position buttons: swap the hitter / pitcher column headers and show the matching rows
+// position buttons: filter the rows, then swap the header and columns to match
 function filterPos(btn, pos) {
     document.querySelectorAll('.btn-pos').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    const isPitcher = (pos === 'SP' || pos === 'RP');
-    const isAll = (pos === 'ALL');
-    document.getElementById('hitter-head').style.display  = isPitcher ? 'none' : '';
-    document.getElementById('pitcher-head').style.display = isPitcher ? '' : 'none';
+    currentPos = pos;
     document.querySelectorAll('#playerBody tr').forEach(row => {
-        row.style.display = (isAll || row.dataset.pos === pos) ? '' : 'none';
+        row.style.display = (pos === 'ALL' || row.dataset.pos === pos) ? '' : 'none';
     });
+    applyColumns();
 }
