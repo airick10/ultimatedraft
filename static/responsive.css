@@ -1,0 +1,175 @@
+/* responsive.css: tablet and phone layouts for every page.
+   Loaded last from base.html, so it overrides the sport stylesheets.
+   Desktop (over 1100px) is untouched. */
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* ============================================================
+   DRAFT BOARDS (bbdraft / bkdraft / fbdraft)
+   ============================================================ */
+
+/* ---- tablet landscape: slimmer side panes ---- */
+@media (max-width: 1100px) {
+  .pane-left  { width: 160px; min-width: 140px; }
+  .pane-right { width: 165px; min-width: 140px; }
+  .player-table { font-size: .75rem; }
+  .player-table th, .player-table td { padding-left: 6px; padding-right: 6px; }
+}
+
+/* ---- tablet portrait and phones: stack everything ---- */
+@media (max-width: 900px) {
+
+  /* top bars */
+  .nav-strip {
+    display: flex; flex-wrap: wrap; gap: 0 18px;
+    padding: 2px 12px;
+  }
+  .nav-strip a { margin-left: 0 !important; padding: 9px 0; font-size: .78rem; }
+
+  .draft-ticker { flex-wrap: wrap; gap: 6px 12px; }
+  .ticker-announcement { flex: 1 1 100%; font-size: .78rem; }
+  .ticker-controls { flex: 1 1 100%; justify-content: space-between; }
+  .btn-toggle-draft { padding: 8px 18px; font-size: .85rem; }
+
+  /* logo strip: fixed-size logos, on-the-clock team stays first, the rest clip off the edge */
+  .logo-wrap { flex: 0 0 76px; max-width: none; }
+  .logo-wrap img { height: 40px; }
+
+  /* the three panes become a vertical stack */
+  .draft-body {
+    flex-direction: column;
+    height: auto;
+    overflow: visible;
+  }
+
+  /* 1) player pool first */
+  .pane-center {
+    order: 1;
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    height: 78vh;
+    height: 78dvh;
+    min-height: 420px;
+    padding-left: 0;
+    overflow-x: auto;          /* header and body slide sideways together */
+    overflow-y: hidden;        /* the pane-center-scroll div does the vertical scrolling */
+  }
+  .pane-center-header,
+  .player-select-bar {
+    position: sticky;          /* stay in view while the tables slide sideways */
+    left: 0;
+  }
+  .pane-center-header { padding-left: 10px; padding-right: 10px; }
+  .pane-center .draft-title { font-size: .9rem; margin-bottom: 8px; }
+
+  .player-table { min-width: 620px; }
+  .pane-center-scroll { min-width: 620px; }
+
+  /* football's compact All tab only has 3 columns, so it doesn't need 620px */
+  .pane-center.all-compact .player-table { width: 100%; min-width: 0; }
+  .pane-center.all-compact .pane-center-scroll { min-width: 0; }
+  .pane-center.all-compact .player-table th:nth-child(1),
+  .pane-center.all-compact .player-table td:nth-child(1) { width: 18%; }
+  .pane-center.all-compact .player-table th:nth-child(2),
+  .pane-center.all-compact .player-table td:nth-child(2) { width: 52%; }
+  .pane-center.all-compact .player-table th:nth-child(3),
+  .pane-center.all-compact .player-table td:nth-child(3) { width: 30%; }
+
+  /* filter and search row */
+  .pool-tools { gap: 8px; }
+  .pool-search { flex: 1 1 100%; max-width: none; }
+  .pos-filter .btn-pos { padding: 8px 12px; font-size: .78rem; }
+
+  /* pick bar: let the stats wrap under the name */
+  .player-select-bar {
+    height: auto; min-height: 56px;
+    padding: 6px 12px;
+    flex-wrap: wrap; gap: 4px 12px;
+  }
+  .player-select-bar .selected-name  { flex: 1 1 auto; }
+  .player-select-bar .selected-stats { flex: 1 0 100%; order: 3; font-size: .72rem; }
+  .btn-draft { padding: 10px 24px; font-size: .9rem; }
+
+  /* 2) on-the-clock roster */
+  .pane-right {
+    order: 2;
+    width: auto; min-width: 0;
+    border-left: 0;
+    border-top: 2px solid #c9a84c;
+    overflow: visible;
+    padding: 12px;
+  }
+  .roster-select { padding: 8px 10px; }
+
+  /* 3) draft log */
+  .pane-left {
+    order: 3;
+    width: auto; min-width: 0;
+    max-height: 260px;
+    border-right: 0;
+    border-top: 2px solid #c9a84c;
+    padding: 12px;
+  }
+  .log-entry { font-size: .78rem; padding: 3px 0; }
+}
+
+/* ---- phones ---- */
+@media (max-width: 600px) {
+  .logo-wrap { flex-basis: 62px; }
+  .logo-wrap img { height: 34px; }
+  .logo-wrap .team-label { font-size: .55rem; }
+  .logo-strip { padding: 6px 8px; gap: 6px; }
+
+  .player-table { font-size: .72rem; }
+  .player-table th { font-size: .62rem; padding: 7px 5px; }
+  .player-table td { padding: 8px 5px; }
+  .team-logo { width: 22px; height: 22px; }
+
+  /* 16px inputs stop iOS from zooming the page when you tap them */
+  .pool-search, .roster-select { font-size: 16px; }
+
+  .ticker-timer { font-size: 1rem; }
+}
+
+/* short landscape phones: give the pool most of the screen */
+@media (max-width: 900px) and (max-height: 500px) and (orientation: landscape) {
+  .pane-center { height: 92vh; height: 92dvh; min-height: 300px; }
+}
+
+
+/* ============================================================
+   SETUP + CONFIRM PAGES (baseball.html, bb_confirm.html, etc.)
+   ============================================================ */
+@media (max-width: 600px) {
+  .cf-wrap { padding: 14px 10px 60px; }
+  .cf-wrap > h1.cf-title { font-size: 1.7rem !important; }   /* beats the inline size on the landing page */
+  .cf-card { padding: 14px; border-radius: 12px; }
+
+  /* sticky action bar: match the smaller card padding */
+  .su-bar { margin: 18px -14px -14px; padding: 10px 14px; }
+  .su-bar .cf-btn { flex: 1 1 auto; }
+
+  .su-seg { flex-wrap: wrap; }
+  .su-seg label { padding: 9px 12px; }
+  .su-teamgrid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); max-height: 360px; }
+  .su-team img { height: 44px; }
+  .su-choices { grid-template-columns: 1fr; }
+  .su-money { max-width: none; }
+  .su-sm { padding: 8px 14px; }
+
+  /* confirm page */
+  .cf-actions { width: 100%; }
+  .cf-actions .cf-btn { flex: 1 1 auto; text-align: center; }
+  .cf-input { font-size: 16px; }
+  .cf-gsearch { font-size: 16px; }
+
+  /* custom pool picker */
+  .cf-sticky { top: 0; padding: 10px 12px; }
+  .cf-pills { flex-wrap: nowrap; overflow-x: auto; width: 100%; padding-bottom: 4px; }
+  .cf-pill { white-space: nowrap; flex: 0 0 auto; }
+  .cf-groups { grid-template-columns: 1fr; }
+  .cf-glist { max-height: 260px; }
+  .cf-glist label { padding: 7px 4px; }
+  .cf-list { columns: 1; max-height: 320px; }
+}
