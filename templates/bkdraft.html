@@ -33,6 +33,7 @@ window.DRAFT = {
 
 
 {% block body %}
+{% set show_salary = (cap|string|replace(',', '')|replace('$', '')|float(0)) > 0 %}
 <div style="position:fixed;inset:0;background:url('{{ url_for('static', filename='hardwood.jpg') }}') center/cover;opacity:0.3;z-index:9999;pointer-events:none;"></div>
 
 <div class="nav-strip">
@@ -102,12 +103,12 @@ window.DRAFT = {
                 <th class="stat-real" onclick="sortTable(4)">RPG <span class="sort-icon">↕</span></th>
                 <th class="stat-real" onclick="sortTable(5)">APG <span class="sort-icon">↕</span></th>
                 <th class="stat-real" onclick="sortTable(6)">FG% <span class="sort-icon">↕</span></th>
-                <th class="stat-real" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>
+                {% if show_salary %}<th class="stat-real" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>{% endif %}
                 <th class="stat-strat" style="display:none" onclick="sortTable(3)">OMade <span class="sort-icon">↕</span></th>
                 <th class="stat-strat" style="display:none" onclick="sortTable(4)">IMade <span class="sort-icon">↕</span></th>
                 <th class="stat-strat" style="display:none" onclick="sortTable(5)">PassDazz <span class="sort-icon">↕</span></th>
                 <th class="stat-strat" style="display:none" onclick="sortTable(6)">Dsteal <span class="sort-icon">↕</span></th>
-                <th class="stat-strat" style="display:none" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>
+                {% if show_salary %}<th class="stat-strat" style="display:none" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>{% endif %}
             </tr>
             <tr id="def-head" style="display:none">
                 <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
@@ -117,12 +118,12 @@ window.DRAFT = {
                 <th class="stat-real" onclick="sortTable(4)">PMade <span class="sort-icon">↕</span></th>
                 <th class="stat-real" onclick="sortTable(5)">IMade <span class="sort-icon">↕</span></th>
                 <th class="stat-real" onclick="sortTable(6)">FMade <span class="sort-icon">↕</span></th>
-                <th class="stat-real" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>
+                {% if show_salary %}<th class="stat-real" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>{% endif %}
                 <th class="stat-strat" style="display:none" onclick="sortTable(3)">OMade <span class="sort-icon">↕</span></th>
                 <th class="stat-strat" style="display:none" onclick="sortTable(4)">PMade <span class="sort-icon">↕</span></th>
                 <th class="stat-strat" style="display:none" onclick="sortTable(5)">IMade <span class="sort-icon">↕</span></th>
                 <th class="stat-strat" style="display:none" onclick="sortTable(6)">FMade <span class="sort-icon">↕</span></th>
-                <th class="stat-strat" style="display:none" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>
+                {% if show_salary %}<th class="stat-strat" style="display:none" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>{% endif %}
             </tr>
         </thead>
     </table>
@@ -148,12 +149,12 @@ window.DRAFT = {
                     <td class="stat-real">{{ p.Pmade if p.Pmade is defined else '—' }}</td>
                     <td class="stat-real">{{ p.Imade if p.Imade is defined else '—' }}</td>
                     <td class="stat-real">{{ p.Fmade if p.Fmade is defined else '—' }}</td>
-                    <td class="stat-real">{{ p.Salary if p.Salary is defined else '—' }}</td>
+                    {% if show_salary %}<td class="stat-real">{{ p.Salary if p.Salary is defined else '—' }}</td>{% endif %}
                     <td class="stat-strat" style="display:none">{{ p.Omade if p.Omade is defined else '—' }}</td>
                     <td class="stat-strat" style="display:none">{{ p.Pmade if p.Pmade is defined else '—' }}</td>
                     <td class="stat-strat" style="display:none">{{ p.Imade if p.Imade is defined else '—' }}</td>
                     <td class="stat-strat" style="display:none">{{ p.Fmade if p.Fmade is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p.Salary if p.Salary is defined else '—' }}</td>
+                    {% if show_salary %}<td class="stat-strat" style="display:none">{{ p.Salary if p.Salary is defined else '—' }}</td>{% endif %}
                 </tr>
                 {% else %}
                 <tr data-pos="{{ p.Pos }}" data-id="{{ p.id }}" data-sal="{{ p.Salary }}" data-url="{{ p.BasketballReferenceURL }}">
@@ -172,12 +173,12 @@ window.DRAFT = {
                     <td class="stat-real">{{ p.rbspgm if p.rbspgm is defined else '—' }}</td>
                     <td class="stat-real">{{ p.astpgm if p.astpgm is defined else '—' }}</td>
                     <td class="stat-real">{{ p.fg_pct if p.fg_pct is defined else '—' }}</td>
-                    <td class="stat-real">{{ p.Salary if p.Salary is defined else '—' }}</td>
+                    {% if show_salary %}<td class="stat-real">{{ p.Salary if p.Salary is defined else '—' }}</td>{% endif %}
                     <td class="stat-strat" style="display:none">{{ p.Omade if p.Omade is defined else '—' }}</td>
                     <td class="stat-strat" style="display:none">{{ p.Imade if p.Imade is defined else '—' }}</td>
                     <td class="stat-strat" style="display:none">{{ p.PassDazz if p.PassDazz is defined else '—' }}</td>
                     <td class="stat-strat" style="display:none">{{ p.Dsteal if p.Dsteal is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p.Salary if p.Salary is defined else '—' }}</td>
+                    {% if show_salary %}<td class="stat-strat" style="display:none">{{ p.Salary if p.Salary is defined else '—' }}</td>{% endif %}
                 </tr>
                 {% endif %}
                 {% endfor %}

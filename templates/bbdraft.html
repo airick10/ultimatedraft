@@ -31,6 +31,7 @@ window.DRAFT = {
 {% endblock %}
 
 {% block body %}
+{% set show_salary = (cap|string|replace(',', '')|replace('$', '')|float(0)) > 0 %}
 <!-- Background, Bootstrap seems to fight this.  So doing an inline -->
 <div style="position:fixed;inset:0;background:url('{{ url_for('static', filename='base_dirt.jpg') }}') center/cover;opacity:0.3;z-index:9999;pointer-events:none;"></div>
 
@@ -102,114 +103,132 @@ window.DRAFT = {
     </div>
 
     <table class="player-table">
-            <thead id="tableHead">
-              <tr id="hitter-head">
-                  <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
-                  <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
-                  <!-- real stats -->
-                    <th class="stat-real" onclick="sortTable(8)">Bats <span class="sort-icon">↕</span></th>
-                    <th class="stat-real" onclick="sortTable(3)">AVG <span class="sort-icon">↕</span></th>
-                    <th class="stat-real" onclick="sortTable(4)">HR <span class="sort-icon">↕</span></th>
-                    <th class="stat-real" onclick="sortTable(5)">RBI <span class="sort-icon">↕</span></th>
-                    <th class="stat-real" onclick="sortTable(6)">SB <span class="sort-icon">↕</span></th>
-                    <th class="stat-real" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>
-                    <!-- strat stats -->
-                    <th class="stat-strat" style="display:none" onclick="sortTable(8)">Bats <span class="sort-icon">↕</span></th>
-                    <th class="stat-strat" style="display:none" onclick="sortTable(9)">Balance <span class="sort-icon">↕</span></th>
-                    <th class="stat-strat" style="display:none" onclick="sortTable(3)">OBTBvL <span class="sort-icon">↕</span></th>
-                    <th class="stat-strat" style="display:none" onclick="sortTable(4)">OBTBvR <span class="sort-icon">↕</span></th>
-                    <th class="stat-strat" style="display:none" onclick="sortTable(5)">Fielding <span class="sort-icon">↕</span></th>
-                    <th class="stat-strat" style="display:none" onclick="sortTable(6)">Stealing <span class="sort-icon">↕</span></th>
-                    <th class="stat-strat" style="display:none" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>
-              </tr>
-              <tr id="pitcher-head" style="display:none">
-                <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
-                <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
-                <th onclick="sortTable(2)">Team <span class="sort-icon">↕</span></th>
-                <!-- real stats -->
-                <th class="stat-real" onclick="sortTable(8)">Throws <span class="sort-icon">↕</span></th>
-                <th class="stat-real" onclick="sortTable(3)">ERA <span class="sort-icon">↕</span></th>
-                <th class="stat-real" onclick="sortTable(4)">W <span class="sort-icon">↕</span></th>
-                <th class="stat-real" onclick="sortTable(5)">WHIP <span class="sort-icon">↕</span></th>
-                <th class="stat-real" onclick="sortTable(6)">SV <span class="sort-icon">↕</span></th>
-                <th class="stat-real" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>
-                <!-- strat stats -->
-                <th class="stat-strat" style="display:none" onclick="sortTable(8)">Throws <span class="sort-icon">↕</span></th>
-                <th class="stat-strat" style="display:none" onclick="sortTable(9)">Balance <span class="sort-icon">↕</span></th>
-                <th class="stat-strat" style="display:none" onclick="sortTable(3)">OBTBvL <span class="sort-icon">↕</span></th>
-                <th class="stat-strat" style="display:none" onclick="sortTable(4)">OBTBvR <span class="sort-icon">↕</span></th>
-                <th class="stat-strat" style="display:none" onclick="sortTable(5)">Endurance <span class="sort-icon">↕</span></th>
-                <th class="stat-strat" style="display:none" onclick="sortTable(6)">Hold <span class="sort-icon">↕</span></th>
-                <th class="stat-strat" style="display:none" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>
-            </tr>
-          </thead>
-    </table>
+  <thead id="tableHead">
+    <tr id="all-head">
+      <th onclick="sortTable(this)">Pos <span class="sort-icon">↕</span></th>
+      <th onclick="sortTable(this)">Name <span class="sort-icon">↕</span></th>
+      <th onclick="sortTable(this)">Team <span class="sort-icon">↕</span></th>
+      <th class="stat-all" onclick="sortTable(this)">AVG <span class="sort-icon">↕</span></th>
+      <th class="stat-all" onclick="sortTable(this)">HR <span class="sort-icon">↕</span></th>
+      <th class="stat-all" onclick="sortTable(this)">W <span class="sort-icon">↕</span></th>
+      <th class="stat-all" onclick="sortTable(this)">ERA <span class="sort-icon">↕</span></th>
+      {% if show_salary %}<th class="stat-all" onclick="sortTable(this)">Salary <span class="sort-icon">↕</span></th>{% endif %}
+    </tr>
+    <tr id="hitter-head" style="display:none">
+      <th onclick="sortTable(this)">Pos <span class="sort-icon">↕</span></th>
+      <th onclick="sortTable(this)">Name <span class="sort-icon">↕</span></th>
+      <th onclick="sortTable(this)">Team <span class="sort-icon">↕</span></th>
+      <th class="stat-real" onclick="sortTable(this)">Bats <span class="sort-icon">↕</span></th>
+      <th class="stat-real" onclick="sortTable(this)">AVG <span class="sort-icon">↕</span></th>
+      <th class="stat-real" onclick="sortTable(this)">HR <span class="sort-icon">↕</span></th>
+      <th class="stat-real" onclick="sortTable(this)">RBI <span class="sort-icon">↕</span></th>
+      <th class="stat-real" onclick="sortTable(this)">SB <span class="sort-icon">↕</span></th>
+      {% if show_salary %}<th class="stat-real" onclick="sortTable(this)">Salary <span class="sort-icon">↕</span></th>{% endif %}
+      <th class="stat-strat" onclick="sortTable(this)">Bats <span class="sort-icon">↕</span></th>
+      <th class="stat-strat" onclick="sortTable(this)">Balance <span class="sort-icon">↕</span></th>
+      <th class="stat-strat" onclick="sortTable(this)">OBTBvL <span class="sort-icon">↕</span></th>
+      <th class="stat-strat" onclick="sortTable(this)">OBTBvR <span class="sort-icon">↕</span></th>
+      <th class="stat-strat" onclick="sortTable(this)">Fielding <span class="sort-icon">↕</span></th>
+      <th class="stat-strat" onclick="sortTable(this)">Stealing <span class="sort-icon">↕</span></th>
+      {% if show_salary %}<th class="stat-strat" onclick="sortTable(this)">Salary <span class="sort-icon">↕</span></th>{% endif %}
+    </tr>
+    <tr id="pitcher-head" style="display:none">
+      <th onclick="sortTable(this)">Pos <span class="sort-icon">↕</span></th>
+      <th onclick="sortTable(this)">Name <span class="sort-icon">↕</span></th>
+      <th onclick="sortTable(this)">Team <span class="sort-icon">↕</span></th>
+      <th class="stat-real" onclick="sortTable(this)">Throws <span class="sort-icon">↕</span></th>
+      <th class="stat-real" onclick="sortTable(this)">ERA <span class="sort-icon">↕</span></th>
+      <th class="stat-real" onclick="sortTable(this)">W <span class="sort-icon">↕</span></th>
+      <th class="stat-real" onclick="sortTable(this)">WHIP <span class="sort-icon">↕</span></th>
+      <th class="stat-real" onclick="sortTable(this)">SV <span class="sort-icon">↕</span></th>
+      {% if show_salary %}<th class="stat-real" onclick="sortTable(this)">Salary <span class="sort-icon">↕</span></th>{% endif %}
+      <th class="stat-strat" onclick="sortTable(this)">Throws <span class="sort-icon">↕</span></th>
+      <th class="stat-strat" onclick="sortTable(this)">Balance <span class="sort-icon">↕</span></th>
+      <th class="stat-strat" onclick="sortTable(this)">OBTBvL <span class="sort-icon">↕</span></th>
+      <th class="stat-strat" onclick="sortTable(this)">OBTBvR <span class="sort-icon">↕</span></th>
+      <th class="stat-strat" onclick="sortTable(this)">Endurance <span class="sort-icon">↕</span></th>
+      <th class="stat-strat" onclick="sortTable(this)">Hold <span class="sort-icon">↕</span></th>
+      {% if show_salary %}<th class="stat-strat" onclick="sortTable(this)">Salary <span class="sort-icon">↕</span></th>{% endif %}
+    </tr>
+  </thead>
+</table>
     <div class="pane-center-scroll">
       <table class="player-table">
           <tbody id="playerBody">
-              {% for p in players %}
-              {% if p.kind == "hitter" %}
-                <tr data-pos="{{ p.short_pos }}" data-kind="hitter" data-id="{{ p.id }}" data-sal="{{ p.s_sal }}" data-url="{{ p.BaseballReferenceURL }}">
-                    <td class="pos-badge">{{ p.short_pos }}</td>
-                    <td>{{ p.FirstName }} {{ p.LastName }}</td>
-                    <td class="team-cell">
-                      {% if p.Team %}
-                      <img class="team-logo"
-                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/baseballdraft/{{ p.Team }}.png"
-                           alt="{{ p.Team }}" title="{{ p.Team }}"
-                           onerror="this.style.display='none'; this.nextElementSibling.classList.remove('visually-hidden');">
-                      <span class="visually-hidden">{{ p.Team }}</span>
-                      {% endif %}
-                    </td>
-                    <!-- real stats -->
-                    <td class="stat-real">{{ p.Bats if p.Bats is defined else '—' }}</td>
-                    <td class="stat-real">{{ p.b_batting_avg if p.b_batting_avg is defined else '—' }}</td>
-                    <td class="stat-real">{{ p.b_hr if p.b_hr is defined else '—' }}</td>
-                    <td class="stat-real">{{ p.b_rbi if p.b_rbi is defined else '—' }}</td>
-                    <td class="stat-real">{{ p.b_sb if p.b_sb is defined else '—' }}</td>
-                    <td class="stat-real">{{ p.s_sal if p.s_sal is defined else '—' }}</td>
-                    <!-- strat stats -->
-                    <td class="stat-strat" style="display:none">{{ p.Bats if p.Bats is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p.s_bal if p.s_bal is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p.s_obtbvl if p.s_obtbvl is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p.s_obtbvr if p.s_obtbvr is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p.s_fielding if p.s_fielding is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p.s_stealing if p.s_stealing is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p.s_sal if p.s_sal is defined else '—' }}</td>
-
-                </tr>
-              {% else %}
-                <tr data-pos="{{ p.short_pos }}" data-kind="pitcher" data-id="{{ p.id }}"  data-sal="{{ p.s_sal }}" data-url="{{ p.BaseballReferenceURL }}" style="display:none">
-                    <td class="pos-badge">{{ p.short_pos }}</td>
-                    <td>{{ p.FirstName }} {{ p.LastName }}</td>
-                    <td class="team-cell">
-                      {% if p.Team %}
-                      <img class="team-logo"
-                           src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/baseballdraft/{{ p.Team }}.png"
-                           alt="{{ p.Team }}" title="{{ p.Team }}"
-                           onerror="this.style.display='none'; this.nextElementSibling.classList.remove('visually-hidden');">
-                      <span class="visually-hidden">{{ p.Team }}</span>
-                      {% endif %}
-                    </td>
-                    <!-- real stats -->
-                    <td class="stat-real">{{ p.Throws if p.Throws is defined else '—' }}</td>
-                    <td class="stat-real">{{ p.p_earned_run_avg if p.p_earned_run_avg is defined else '—' }}</td>
-                    <td class="stat-real">{{ p.p_w if p.p_w is defined else '—' }}</td>
-                    <td class="stat-real">{{ p.p_whip if p.p_whip is defined else '—' }}</td>
-                    <td class="stat-real">{{ p.p_sv if p.p_sv is defined else '—' }}</td>
-                    <td class="stat-real">{{ p.s_sal if p.s_sal is defined else '—' }}</td>
-                    <!-- strat stats -->
-                    <td class="stat-strat" style="display:none">{{ p.Throws if p.Throws is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p.s_obtbvl if p.s_obtbvl is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p.s_obtbvr if p.s_obtbvr is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p.s_endurance if p.s_endurance is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p.s_ho if p.s_ho is defined else '—' }}</td>
-                    <td class="stat-strat" style="display:none">{{ p.s_sal if p.s_sal is defined else '—' }}</td>
-                </tr>
-                {% endif %}
-              {% endfor %}
-          </tbody>
+  {% for p in players %}
+  {% if p.kind == "hitter" %}
+    <tr data-pos="{{ p.short_pos }}" data-kind="hitter" data-id="{{ p.id }}" data-sal="{{ p.s_sal }}" data-url="{{ p.BaseballReferenceURL }}">
+      <td class="pos-badge">{{ p.short_pos }}</td>
+      <td>{{ p.FirstName }} {{ p.LastName }}</td>
+      <td class="team-cell">
+        {% if p.Team %}
+        <img class="team-logo"
+             src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/baseballdraft/{{ p.Team }}.png"
+             alt="{{ p.Team }}" title="{{ p.Team }}"
+             onerror="this.style.display='none'; this.nextElementSibling.classList.remove('visually-hidden');">
+        <span class="visually-hidden">{{ p.Team }}</span>
+        {% endif %}
+      </td>
+      <!-- real stats -->
+      <td class="stat-real">{{ p.Bats if p.Bats is defined else '—' }}</td>
+      <td class="stat-real">{{ p.b_batting_avg if p.b_batting_avg is defined else '—' }}</td>
+      <td class="stat-real">{{ p.b_hr if p.b_hr is defined else '—' }}</td>
+      <td class="stat-real">{{ p.b_rbi if p.b_rbi is defined else '—' }}</td>
+      <td class="stat-real">{{ p.b_sb if p.b_sb is defined else '—' }}</td>
+      {% if show_salary %}<td class="stat-real">{{ p.s_sal if p.s_sal is defined else '—' }}</td>{% endif %}
+      <!-- strat stats -->
+      <td class="stat-strat">{{ p.Bats if p.Bats is defined else '—' }}</td>
+      <td class="stat-strat">{{ p.s_bal if p.s_bal is defined else '—' }}</td>
+      <td class="stat-strat">{{ p.s_obtbvl if p.s_obtbvl is defined else '—' }}</td>
+      <td class="stat-strat">{{ p.s_obtbvr if p.s_obtbvr is defined else '—' }}</td>
+      <td class="stat-strat">{{ p.s_fielding if p.s_fielding is defined else '—' }}</td>
+      <td class="stat-strat">{{ p.s_stealing if p.s_stealing is defined else '—' }}</td>
+      {% if show_salary %}<td class="stat-strat">{{ p.s_sal if p.s_sal is defined else '—' }}</td>{% endif %}
+      <!-- All tab -->
+      <td class="stat-all">{{ p.b_batting_avg if p.b_batting_avg is defined else '—' }}</td>
+      <td class="stat-all">{{ p.b_hr if p.b_hr is defined else '—' }}</td>
+      <td class="stat-all">—</td>
+      <td class="stat-all">—</td>
+      {% if show_salary %}<td class="stat-all">{{ p.s_sal if p.s_sal is defined else '—' }}</td>{% endif %}
+    </tr>
+  {% else %}
+    <tr data-pos="{{ p.short_pos }}" data-kind="pitcher" data-id="{{ p.id }}" data-sal="{{ p.s_sal }}" data-url="{{ p.BaseballReferenceURL }}">
+      <td class="pos-badge">{{ p.short_pos }}</td>
+      <td>{{ p.FirstName }} {{ p.LastName }}</td>
+      <td class="team-cell">
+        {% if p.Team %}
+        <img class="team-logo"
+             src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/baseballdraft/{{ p.Team }}.png"
+             alt="{{ p.Team }}" title="{{ p.Team }}"
+             onerror="this.style.display='none'; this.nextElementSibling.classList.remove('visually-hidden');">
+        <span class="visually-hidden">{{ p.Team }}</span>
+        {% endif %}
+      </td>
+      <!-- real stats -->
+      <td class="stat-real">{{ p.Throws if p.Throws is defined else '—' }}</td>
+      <td class="stat-real">{{ p.p_earned_run_avg if p.p_earned_run_avg is defined else '—' }}</td>
+      <td class="stat-real">{{ p.p_w if p.p_w is defined else '—' }}</td>
+      <td class="stat-real">{{ p.p_whip if p.p_whip is defined else '—' }}</td>
+      <td class="stat-real">{{ p.p_sv if p.p_sv is defined else '—' }}</td>
+      {% if show_salary %}<td class="stat-real">{{ p.s_sal if p.s_sal is defined else '—' }}</td>{% endif %}
+      <!-- strat stats -->
+      <td class="stat-strat">{{ p.Throws if p.Throws is defined else '—' }}</td>
+      <td class="stat-strat">{{ p.s_bal if p.s_bal is defined else '—' }}</td>
+      <td class="stat-strat">{{ p.s_obtbvl if p.s_obtbvl is defined else '—' }}</td>
+      <td class="stat-strat">{{ p.s_obtbvr if p.s_obtbvr is defined else '—' }}</td>
+      <td class="stat-strat">{{ p.s_endurance if p.s_endurance is defined else '—' }}</td>
+      <td class="stat-strat">{{ p.s_ho if p.s_ho is defined else '—' }}</td>
+      {% if show_salary %}<td class="stat-strat">{{ p.s_sal if p.s_sal is defined else '—' }}</td>{% endif %}
+      <!-- All tab -->
+      <td class="stat-all">—</td>
+      <td class="stat-all">—</td>
+      <td class="stat-all">{{ p.p_w if p.p_w is defined else '—' }}</td>
+      <td class="stat-all">{{ p.p_earned_run_avg if p.p_earned_run_avg is defined else '—' }}</td>
+      {% if show_salary %}<td class="stat-all">{{ p.s_sal if p.s_sal is defined else '—' }}</td>{% endif %}
+    </tr>
+  {% endif %}
+  {% endfor %}
+</tbody>
     </table>
   </div>
 
