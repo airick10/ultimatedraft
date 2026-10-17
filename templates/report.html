@@ -79,6 +79,28 @@ table.stat tfoot td{background:#eef2f7;font-weight:700;color:#111827;border-top:
 .json-bar a:hover{border-color:var(--gold);background:#fff}
 footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
 @media print{.nav{display:none}.team-body{display:block!important}.team{break-inside:avoid-page}}
+/* ---- phones and small tablets ---- */
+@media (max-width: 700px) {
+  .nav-inner { padding: 8px 10px; gap: 8px; }
+  .brand { flex: 1 1 100%; margin-right: 0; }
+  .brand span { display: block; margin-left: 0; font-size: .8rem; }
+  .nav input { flex: 1 1 140px; width: auto; min-width: 0; font-size: 16px; }
+  .nav button { padding: 8px 12px; }
+
+  /* the Teams menu spans the screen instead of running off the left edge */
+  .menu { position: static; }
+  .menu-list { left: 10px; right: 10px; top: 100%; min-width: 0; margin-top: 4px; }
+
+  main { padding: 4px 8px 30px; }
+  .team { scroll-margin-top: 130px; }
+  .team-head { flex-wrap: wrap; padding: 10px 12px; }
+  .team-head h2 { font-size: 1.05rem; }
+  .meta { flex: 1 1 100%; order: 3; margin-left: 0; font-size: .8rem; }
+  .team-body { padding: 4px 10px 14px; }
+
+  table.stat th, table.stat td { padding: 5px 7px; }
+  table.stat th.name, table.stat td.name { min-width: 130px; }
+}
 {% endraw %}
 </style>
 </head>
@@ -267,6 +289,7 @@ footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
   }, { rootMargin: '-90px 0px -70% 0px' });
   $$('.team').forEach(t => io.observe(t));
 })();
+
 {% endraw %}
 </script>
 </body>
