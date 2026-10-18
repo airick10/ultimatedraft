@@ -29,6 +29,7 @@
   const numTeams = () => Number($('input[name="num_teams"]:checked', form).value);
   const mine     = () => $$('input[name="human_teams"]:checked', form);
   const capOn    = () => $('input[name="cap"]:checked', form).value === 'Yes';
+  const bzOn     = () => $('input[name="berserker"]:checked', form).value === 'Yes';
 
   function refresh() {
     const n = numTeams();
@@ -44,10 +45,11 @@
       $('input[name="pool"]:checked', form).value
     ];
     const capText = !on ? 'No cap' : (amount > 0 ? `Cap $${amount.toLocaleString('en-US')}` : 'Cap amount needed');
+    const modeText = bzOn() ? ' \u00b7 Berserker' : '';
 
     summary.textContent = picked === 0
       ? 'Pick at least one team to continue'
-      : `${n} teams \u00b7 ${picked} yours \u00b7 ${poolName} \u00b7 ${capText}`;
+      : `${n} teams \u00b7 ${picked} yours \u00b7 ${poolName} \u00b7 ${capText}${modeText}`;
     summary.classList.toggle('su-dim', picked === 0);
     goBtn.disabled = !(picked > 0 && (!on || amount > 0));
   }
