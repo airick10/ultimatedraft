@@ -965,7 +965,8 @@ def _num_at(row, i):
 
 def _foot_row(columns, rows, agg_map, label):
     """Footer row for a table: sums for counting stats and weighted averages for rates (real stats),
-    plain averages for ratings (strat). Returns None for tables with fewer than two players."""
+    plain averages for ratings (strat). Returns None for tables with fewer than two players.
+    Each cell carries its number in "sort" so the team rankings can use it."""
     if not agg_map or len(rows) < 2:
         return None
     heads = [c["h"] for c in columns]
@@ -974,15 +975,18 @@ def _foot_row(columns, rows, agg_map, label):
         agg   = agg_map.get(col["h"]) if i > 0 else None
         style = col.get("style", "auto")
         text  = label if i == 0 else ""
+        value = None
 
         if agg == "sum":
             vals = [v for v in (_num_at(r, i) for r in rows) if v is not None]
             if vals:
-                text = _fmt(sum(vals), style)
+                value = sum(vals)
+                text = _fmt(value, style)
         elif agg == "avg":
             vals = [v for v in (_num_at(r, i) for r in rows) if v is not None]
             if vals:
-                text = _fmt(sum(vals) / len(vals), "d1")
+                value = sum(vals) / len(vals)
+                text = _fmt(value, "d1")
         elif agg == "wl":
             wins = losses = 0
             found = False
@@ -994,6 +998,7 @@ def _foot_row(columns, rows, agg_map, label):
                     found = True
             if found:
                 text = f"{wins}-{losses}"
+                value = wins                      # rankings sort by wins
         elif agg == "pair":
             pairs = [re.match(r"\s*(-?[\d.]+)\s*/\s*(-?[\d.]+)", r[i]["text"]) for r in rows]
             pairs = [m for m in pairs if m]
@@ -1001,6 +1006,7 @@ def _foot_row(columns, rows, agg_map, label):
                 o = sum(float(m.group(1)) for m in pairs) / len(pairs)
                 d = sum(float(m.group(2)) for m in pairs) / len(pairs)
                 text = f"{_fmt(o, 'd1')}/{_fmt(d, 'd1')}"
+                value = o                         # rankings sort by the offense number
         elif isinstance(agg, tuple) and agg[0] == "wavg" and agg[1] in heads:
             w_i = heads.index(agg[1])
             num = den = 0.0
@@ -1010,9 +1016,10 @@ def _foot_row(columns, rows, agg_map, label):
                     num += v * w
                     den += w
             if den:
-                text = _fmt(num / den, style)
+                value = num / den
+                text = _fmt(value, style)
 
-        cells.append({"kind": "name" if i == 0 else col["kind"], "text": text})
+        cells.append({"kind": "name" if i == 0 else col["kind"], "text": text, "sort": value})
     return cells
 
 
@@ -1044,7 +1051,7 @@ BK_REAL_AGG = {
     "FG": "sum", "FGA": "sum", "FG3": "sum", "FG3A": "sum", "FT": "sum", "FTA": "sum",
     "RB": "sum", "Ast": "sum", "Pts": "sum",
     "FG%": ("wavg", "FGA"), "3P%": ("wavg", "FG3A"), "FT%": ("wavg", "FTA"),
-    "PtspG": "sum", "RBpG": "sum", "AstpG": "sum", "Salary": "sum",
+    "PtspG": "avg", "RBpG": "avg", "AstpG": "avg", "Salary": "sum",
 }
 BK_STRAT_AVG = {
     **{h: "pair" for h in ("LG-Reb", "RG-Reb", "LF-Reb", "RF-Reb", "C-Reb")},
@@ -1081,6 +1088,141 @@ BK_DEF_COLS = [
 ]
 
 
+# ---------- team rankings (bottom of every report) ----------
+# Each column is (header shown, table position inside the section, column header in that table, direction).
+#   direction  1 = higher is better, -1 = lower is better, 0 = shown but not ranked.
+# If a Strat rating works the other way in your data, just flip its 1 / -1 here.
+
+BB_RANK_SPEC = [
+    {"cls": "real", "title": "Real Stats: team totals and averages", "cols": [
+        ("Hit HR", 0, "HR", 1), ("Hit RBI", 0, "RBI", 1), ("Hit SB", 0, "SB", 1),
+        ("Hit AVG", 0, "Avg", 1), ("Hit OBP", 0, "OBP", 1), ("Hit SLG", 0, "SLG", 1),
+        ("Hit OPS", 0, "OPS", 1), ("Hit WAR", 0, "WAR", 1),
+        ("Pit W-L", 1, "W-L", 1), ("Pit SV", 1, "SV", 1), ("Pit K", 1, "K", 1),
+        ("Pit ERA", 1, "ERA", -1), ("Pit WHIP", 1, "WHIP", -1), ("Pit FIP", 1, "FIP", -1),
+        ("Pit WAR", 1, "WAR", 1),
+        ("Payroll", None, "__payroll__", 0),
+    ]},
+    {"cls": "strat", "title": "Strat-O-Matic Ratings: team averages", "cols": [
+        ("Hit OBTBvL", 0, "OBTBvL", 1), ("Hit OBTBvR", 0, "OBTBvR", 1),
+        ("Hit HRvL", 0, "HRvL", 1), ("Hit HRvR", 0, "HRvR", 1), ("Hit Speed", 0, "Speed", 1),
+        ("Pit OBTBvL", 1, "OBTBvL", -1), ("Pit OBTBvR", 1, "OBTBvR", -1),     # pitchers: what they allow, lower is better
+        ("Pit HRvL", 1, "HRvL", -1), ("Pit HRvR", 1, "HRvR", -1),
+        ("Payroll", None, "__payroll__", 0),
+    ]},
+]
+
+BK_RANK_SPEC = [
+    {"cls": "real", "title": "Real Stats: team totals and averages", "cols": [
+        ("Pts", 0, "Pts", 1), ("Reb", 0, "RB", 1), ("Ast", 0, "Ast", 1),
+        ("FG%", 0, "FG%", 1), ("3P%", 0, "3P%", 1), ("FT%", 0, "FT%", 1),
+        ("PPG", 0, "PtspG", 1), ("RPG", 0, "RBpG", 1), ("APG", 0, "AstpG", 1),
+        ("Payroll", None, "__payroll__", 0),
+    ]},
+    {"cls": "strat", "title": "Strat-O-Matic Ratings: team averages", "cols": [
+        ("Shoot", 0, "Shoot", 0), ("Tend", 0, "Tend", 0), ("Block", 0, "Block", 0),
+        ("Omade", 0, "Omade", 1), ("Pmade", 0, "Pmade", 1), ("Imade", 0, "Imade", 1), ("Fmade", 0, "Fmade", 1),
+        ("PassDazz", 0, "PassDazz", 1), ("Dsteal", 0, "Dsteal", 1),
+        ("Payroll", None, "__payroll__", 0),
+    ]},
+]
+
+# football table positions: 0 passers, 1 rushers, 2 tight ends, 3 receivers, 4 lines, 5 special
+FB_RANK_SPEC = [
+    {"cls": "real", "title": "Real Stats: team totals and averages", "cols": [
+        ("QB Pass Yds", 0, "PassYards", 1), ("QB TD", 0, "PassTDs", 1),
+        ("QB Cmp%", 0, "Completion%", 1), ("QB Int%", 0, "Int%", -1),
+        ("RB Rush Yds", 1, "RushYards", 1), ("RB Rush TD", 1, "RushTDs", 1), ("RB Avg", 1, "RushingAverage", 1),
+        ("TE Rec Yds", 2, "RecYards", 1), ("TE TD", 2, "RecTDs", 1),
+        ("WR Rec", 3, "Receptions", 1), ("WR Rec Yds", 3, "RecYards", 1), ("WR TD", 3, "RecTDs", 1),
+        ("Payroll", None, "__payroll__", 0),
+    ]},
+    {"cls": "strat", "title": "Strat-O-Matic Ratings: team averages", "cols": [
+        ("QB Rating", 0, "QBRating", 1), ("QB Y/Att", 0, "Yds/Attempt", 1), ("QB Int%", 0, "Int%", -1),
+        ("RB Y/Rush", 1, "Yds/Rush", 1), ("RB Fum%", 1, "Fum%", -1),
+        ("TE Rec%", 2, "Rec%", 1), ("TE Y/Rec", 2, "Yds/Rec", 1),
+        ("WR Rec%", 3, "Rec%", 1), ("WR Y/Rec", 3, "Yds/Rec", 1),
+        ("Payroll", None, "__payroll__", 0),
+    ]},
+]
+
+
+def _rank_cell(team, section, table_idx, header):
+    """(text, number) for one team and one ranking column, or ("—", None) when there's nothing to show."""
+    if header == "__payroll__":
+        pay = team.get("payroll") or 0
+        return (_fmt(pay, "money"), pay) if pay > 0 else ("—", None)
+    if section is None or table_idx is None or table_idx >= len(section["tables"]):
+        return ("—", None)
+    table = section["tables"][table_idx]
+    heads = [c["h"] for c in table["cols"]]
+    if not table.get("foot") or header not in heads:
+        return ("—", None)
+    cell = table["foot"][heads.index(header)]
+    if cell.get("sort") is None:
+        return ("—", None)
+    return (cell["text"], cell["sort"])
+
+
+def build_rankings(teams, spec):
+    """One ranking table per block in spec. Every team is ranked on every column with a direction
+    (1 = best), a team's overall rank comes from its average position, and the best and worst
+    value in each column get flagged."""
+    blocks = []
+    for block in spec:
+        cols = block["cols"]
+        grid = []
+        for t in teams:
+            section = next((s for s in t["sections"] if s["cls"] == block["cls"]), None)
+            grid.append([_rank_cell(t, section, idx, header) for _name, idx, header, _d in cols])
+
+        ranks = [[None] * len(cols) for _ in teams]
+        flags = [[""] * len(cols) for _ in teams]
+        for j, (_name, _idx, _header, direction) in enumerate(cols):
+            if direction == 0:
+                continue
+            vals = [(i, grid[i][j][1]) for i in range(len(teams)) if grid[i][j][1] is not None]
+            if len(vals) < 2:
+                continue
+            nums  = [v for _, v in vals]
+            best  = max(nums) if direction > 0 else min(nums)
+            worst = min(nums) if direction > 0 else max(nums)
+            for i, v in vals:
+                ahead = sum(1 for n in nums if (n > v if direction > 0 else n < v))
+                ranks[i][j] = ahead + 1
+                if len(vals) >= 3 and best != worst:
+                    if v == best:
+                        flags[i][j] = "best"
+                    elif v == worst:
+                        flags[i][j] = "worst"
+
+        avg = []
+        for i in range(len(teams)):
+            got = [r for r in ranks[i] if r is not None]
+            avg.append(sum(got) / len(got) if got else None)
+        scored = [round(a, 6) for a in avg if a is not None]
+
+        rows = []
+        for i, t in enumerate(teams):
+            a = avg[i]
+            rows.append({
+                "name": t["name"], "slug": t["slug"], "logo": t["logo"], "is_human": t["is_human"],
+                "rank": (1 + sum(1 for s in scored if s < round(a, 6))) if a is not None else None,
+                "avg": f"{a:.1f}" if a is not None else "—",
+                "avg_sort": a,
+                "cells": [{"text": grid[i][j][0], "sort": grid[i][j][1], "flag": flags[i][j]}
+                          for j in range(len(cols))],
+            })
+        rows.sort(key=lambda r: (r["rank"] is None, r["rank"] or 0, r["name"].lower()))
+
+        blocks.append({
+            "cls": block["cls"],
+            "title": block["title"],
+            "headers": [{"name": name, "low": d < 0} for name, _i, _h, d in cols],
+            "rows": rows,
+        })
+    return blocks
+
 # ---- the three builders ----
 
 def build_bb_report_context(draftname):
@@ -1103,6 +1245,7 @@ def build_bb_report_context(draftname):
             "slug":     "team-" + _slug(name, used),
             "is_human": team.get("type") == "human",
             "logo":     f"{LOGO_ROOT}/fictional/baseball/{quote(name)}_bb.png",
+            "payroll":  payroll,
             "meta":     _team_meta_line([f"{len(hitters)} hitters", f"{len(pitchers)} pitchers"], payroll, cap),
             "sections": [
                 {"cls": "real", "title": "Real Stats", "tables": [
@@ -1121,6 +1264,7 @@ def build_bb_report_context(draftname):
         "sport_label": "Baseball",
         "generated":   datetime.now().strftime("%Y-%m-%d %H:%M"),
         "teams":       teams,
+        "rankings":    build_rankings(teams, BB_RANK_SPEC),
     }
 
 
@@ -1149,6 +1293,7 @@ def build_bk_report_context(draftname):
             "slug":     "team-" + _slug(name, used),
             "is_human": team.get("type") == "human",
             "logo":     f"{LOGO_ROOT}/fictional/basketball/{quote(name)}_bk.png",
+            "payroll":  payroll,
             "meta":     _team_meta_line(parts, payroll, cap),
             "sections": [
                 {"cls": "real", "title": "Real Stats", "tables": [
@@ -1163,6 +1308,7 @@ def build_bk_report_context(draftname):
         "sport_label": "Basketball",
         "generated":   datetime.now().strftime("%Y-%m-%d %H:%M"),
         "teams":       teams,
+        "rankings":    build_rankings(teams, BK_RANK_SPEC),
     }
 
 
@@ -1194,6 +1340,7 @@ def build_fb_report_context(draftname):
             "slug":     "team-" + _slug(name, used),
             "is_human": team.get("type") == "human",
             "logo":     f"{LOGO_ROOT}/fictional/football/{quote(name)}_fb.png",
+            "payroll":  payroll,
             "meta":     _team_meta_line([f"{len(mine)} players"], payroll, cap),
             "sections": [
                 {"cls": "real",  "title": "Real Stats",            "tables": real_tables},
@@ -1206,4 +1353,5 @@ def build_fb_report_context(draftname):
         "sport_label": "Football",
         "generated":   datetime.now().strftime("%Y-%m-%d %H:%M"),
         "teams":       teams,
+        "rankings":    build_rankings(teams, FB_RANK_SPEC),
     }

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, abort, current_app, redirect, url_for, send_file, Response
+from flask import Blueprint, render_template, request, abort, redirect, url_for, send_file, Response, has_request_context
 from .ai import ai_select_bb, ai_select_bk, ai_select_fb, parse_salary, to_float, open_position_lottery_bk, make_cap_checker
 from .services import (
     load_baseball,
@@ -6,19 +6,20 @@ from .services import (
     load_football,
     load_hitters_json,
     load_pitchers_json,
-    load_basketball_json, 
+    load_basketball_json,
+    load_basketball_defense_json,
     load_football_passing_json,
     load_football_rushing_json,
     load_football_receiving_json,
     load_football_def_ol_json,
     load_football_special_json,
-    initial_save_baseball_json, 
+    initial_save_baseball_json,
     initial_save_baseball_meta_json,
-    initial_save_baseball_log_json, 
-    initial_save_basketball_json, 
+    initial_save_baseball_log_json,
+    initial_save_basketball_json,
     initial_save_basketball_meta_json,
     initial_save_basketball_log_json,
-    initial_save_football_json, 
+    initial_save_football_json,
     initial_save_football_meta_json,
     initial_save_football_log_json,
     get_saved_baseball_drafts,
@@ -27,10 +28,7 @@ from .services import (
     load_saved_basketball_draft,
     get_saved_football_drafts,
     load_saved_football_draft,
-    get_team_names, 
-    get_person, 
-    positions, 
-    sort_people, 
+    get_team_names,
     get_next_team_id,
     get_team_by_id,
     load_baseball_meta,
@@ -49,7 +47,6 @@ from .services import (
     duplicate_id_report,
     add_twins
 )
-from datetime import datetime
 from .exports import (
     build_bb_workbook, build_bk_workbook, build_fb_workbook,
     build_log_text, build_bb_report_context, build_bk_report_context, build_fb_report_context, build_team_records
@@ -57,6 +54,7 @@ from .exports import (
 import random
 import io
 import re
+import traceback
 from .cap import salary_of
 from collections import Counter
 import json
@@ -70,7 +68,6 @@ main = Blueprint("main", __name__)
 
 @main.route("/")
 def index():
-    #return "<h1>Using Blueprint</h1>"
     return render_template("index.html")
 
 @main.route("/baseball")
@@ -83,7 +80,6 @@ def start_baseball():
 @main.route("/show_bb_logos")
 def show_bb_logos():
     human_teams = []
-    num_teams = int(request.args.get("num_teams", 1))
     bb_set = get_team_names(32, "bb", human_teams)
     return render_template("partials/show_logos.html", names=bb_set, sport="baseball")
 
@@ -177,7 +173,6 @@ def bb_confirm():
     draftname = request.form.get("draftname")
     selected_player_ids = request.form.getlist("selected_player_ids")
     ai_set = request.form.getlist("ai_set")
-    confirm_stage = request.form.get("confirm_stage")
 
     num_human_teams = len(human_teams)
 
@@ -264,7 +259,8 @@ def bb_draft():
     if not output_path.exists():
         initial_save_baseball_json(people, draftname)
     if not meta_path.exists():
-        initial_save_baseball_meta_json(draftname, num_teams, human_teams, ai_set, pool, cap, output_path)
+        initial_save_baseball_meta_json(draftname, num_teams, human_teams, ai_set, pool, cap, output_path,
+                                        berserker=read_berserker(request.form))
     if not log_path.exists():
         initial_save_baseball_log_json(draftname)
 
@@ -412,7 +408,6 @@ def start_basketball():
 @main.route("/show_bk_logos")
 def show_bk_logos():
     human_teams = []
-    num_teams = int(request.args.get("num_teams", 1))
     bk_set = get_team_names(32, "bk", human_teams)
     return render_template("partials/show_logos.html", names=bk_set, sport="basketball")
 
@@ -498,7 +493,6 @@ def bk_confirm():
     draftname = request.form.get("draftname")
     selected_player_ids = request.form.getlist("selected_player_ids")
     ai_set = request.form.getlist("ai_set")
-    confirm_stage = request.form.get("confirm_stage")
 
     num_human_teams = len(human_teams)
 
@@ -582,7 +576,8 @@ def bk_draft():
     if not output_path.exists():
         initial_save_basketball_json(people, draftname)
     if not meta_path.exists():
-        initial_save_basketball_meta_json(draftname, num_teams, human_teams, ai_set, pool, cap, output_path)
+        initial_save_basketball_meta_json(draftname, num_teams, human_teams, ai_set, pool, cap, output_path,
+                                          berserker=read_berserker(request.form))
     if not log_path.exists():
         initial_save_basketball_log_json(draftname)
 
@@ -682,7 +677,7 @@ def bk_report(draftname):
         mimetype="text/html",
     )
 
-# --------- FOOTBALL -------------------------------------------------------------    
+# --------- FOOTBALL -------------------------------------------------------------
 
 @main.route("/football")
 def start_football():
@@ -694,7 +689,6 @@ def start_football():
 @main.route("/show_fb_logos")
 def show_fb_logos():
     human_teams = []
-    num_teams = int(request.args.get("num_teams", 1))
     fb_set = get_team_names(32, "fb", human_teams)
     return render_template("partials/show_logos.html", names=fb_set, sport="football")
 
@@ -707,7 +701,6 @@ def fb_confirm():
     draftname = request.form.get("draftname")
     selected_player_ids = request.form.getlist("selected_player_ids")
     ai_set = request.form.getlist("ai_set")
-    confirm_stage = request.form.get("confirm_stage")
 
     num_human_teams = len(human_teams)
 
@@ -749,10 +742,6 @@ def fb_confirm():
 
     else:
         raise ValueError(f"Unknown pool type: {pool}")
-
-    from collections import Counter
-    pos_counts = Counter(p.get('short_pos','') for p in people)
-    print(pos_counts)
 
     return render_template(
         "fb_confirm.html",
@@ -877,7 +866,8 @@ def fb_draft():
     if not output_path.exists():
         initial_save_football_json(people, draftname)
     if not meta_path.exists():
-        initial_save_football_meta_json(draftname, num_teams, human_teams, ai_set, pool, cap, output_path)
+        initial_save_football_meta_json(draftname, num_teams, human_teams, ai_set, pool, cap, output_path,
+                                        berserker=read_berserker(request.form))
     if not log_path.exists():
         initial_save_football_log_json(draftname)
 
@@ -1036,7 +1026,7 @@ def make_ai_pick_bb(draftname):
     pick_num = meta['current_pick']
     player['team_id'] = team_id
 
-    # NEW: two-way players bring their twin along
+    # two-way players bring their twin along
     bonus = maybe_add_twin_bb(player, players, team, pick_num, log_path)
 
     with open(draft_path, "w", encoding="utf-8") as f:
@@ -1370,6 +1360,16 @@ def read_cap(form):
     raw = raw.replace("$", "").replace(",", "")
     return raw if parse_salary(raw) > 0 else ""
 
+def read_berserker(form):
+    """True when the setup page's Berserker option is switched on."""
+    return str(form.get("berserker", "")).strip().lower() in ("yes", "on", "true", "1")
+
+
+@main.app_context_processor
+def inject_berserker():
+    """Every template can use {{ berserker }}; the confirm pages use it to pass the choice along as a hidden field."""
+    return {"berserker": read_berserker(request.form) if has_request_context() else False}
+
 
 @main.route("/log_export/<sport>/<draftname>")
 def log_export(sport, draftname):
@@ -1505,7 +1505,6 @@ def twin_check(sport):
 
 @socketio.on('make_pick')
 def handle_make_pick(data):
-    print(f">>> make_pick received: {data}")
     draftname = data['draftname']
     player_id = str(data['player_id'])
     sport     = data.get('sport', 'bb')
@@ -1644,7 +1643,7 @@ def handle_skip_pick(data):
     draftname = data['draftname']
     sport     = data.get('sport', 'bb')
 
-    # NEW: ignore timeouts when the draft is paused
+    # ignore timeouts when the draft is paused
     if (draftname, sport) not in RUNNING_DRAFTS:
         return
 

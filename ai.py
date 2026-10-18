@@ -16,6 +16,7 @@ from .services import (
 from collections import Counter
 from .cap import CapChecker, CapRules, salary_of
 from .tiers import tier_pick
+from .berserker import is_berserker, berserker_roll, berserker_pick
 
 
 # ============================================================
@@ -50,40 +51,11 @@ def to_float(value, default=0.0):
     return number if math.isfinite(number) else default
 
 
-POS_ABBR_TO_CODE = {
-    'c': '2', '1b': '3', '2b': '4', '3b': '5',
-    'ss': '6', 'lf': '7', 'cf': '8', 'rf': '9',
-}
-
-def parse_fielding(hitter):
-    """'rf-1(-2)e6 1b-4e7 cf-2e6' -> ('9', '3', '8')  (DP1, DP2, DP3)."""
-    raw = hitter.get('s_fielding', '') or ''
-    tokens = raw.strip().split()
-    codes = []
-    for tok in tokens[:3]:
-        abbr = tok.split('-')[0].strip().lower()
-        codes.append(POS_ABBR_TO_CODE.get(abbr, ''))
-    while len(codes) < 3:
-        codes.append('')
-    return codes[0], codes[1], codes[2]
-
-
 def bat_throw_code(value):
     """'Left' -> 'L', 'Right' -> 'R', 'Switch' -> 'S'."""
     if not value:
         return ''
     return value.strip()[0].upper()
-
-
-def pitcher_role(pitcher):
-    """'S(7)' -> 'S' (starter). 'R...' / 'C...' -> 'R' (reliever, closer counts as reliever)."""
-    raw = pitcher.get('s_endurance', '') or ''
-    first = raw.strip()[:1].upper()
-    if first == 'S':
-        return 'S'
-    if first in ('R', 'C'):
-        return 'R'
-    return ''
 
 
 # ============================================================
@@ -347,9 +319,18 @@ def auto_select_pitcher_bb(position, hitters_pool, pitchers_pool, round_num, foc
     return top_four_grabs_bb('H', pool, position, 0, avg_salary, focus)
 
 
+def can_fill_bb(player, label, pos_counts, base_slots):
+    """Berserker: can this player take an open slot of this kind?"""
+    if label == 'FLEX':
+        return True
+    if label == 'UT':
+        return fits_open_slots_bb(player, Counter({'UT': 1}), pos_counts, base_slots)
+    return natural_slot_bb(player) == label
+
+
 def ai_select_bb(team, roster_slots, team_picks, all_players, round_num, cap, salary_cap_enabled):
     """
-    One baseball AI pick. Order of business: tiered players first, then the archetype's normal pick,
+    One baseball AI pick. Order of business: Berserker roll, tiered players, then the archetype's normal pick,
     with the salary cap, the UT variety rule and the L/R balance (s_bal) all narrowing the candidates.
     Returns a player id, or None.
     """
@@ -368,6 +349,13 @@ def ai_select_bb(team, roster_slots, team_picks, all_players, round_num, cap, sa
     else:
         affordable = undrafted
     avg_salary = float('inf')
+
+    # Berserker: most of the time, a random player for a random open slot
+    if is_berserker(team) and berserker_roll():
+        pick = berserker_pick(affordable, list(open_counts.elements()),
+                              lambda p, label: can_fill_bb(p, label, pos_counts, base_slots))
+        if pick is not None:
+            return pick
 
     # tiered players first (tier 1, then tier 2), as long as they fit an open slot
     pick = tier_pick(affordable, tier_group_bb, tier_open_groups_bb(open_counts))
@@ -540,6 +528,15 @@ def _defense_score(p):
     return (-parse_salary(p.get('Salary')), made)
 
 
+def can_fill_bk(player, label):
+    """Berserker: can this player take an open slot of this kind?"""
+    if label == 'Def':
+        return _is_def(player)
+    if _is_def(player):
+        return False
+    return label == 'UT' or player.get('Pos') == label
+
+
 def ai_select_bk(team, roster_slots, team_picks, all_players, round_num, cap, salary_cap_enabled):
     """Port of aiSelect() for basketball -- one team's single pick."""
     ai_focus = team.get('AIFocus', 1)
@@ -555,6 +552,12 @@ def ai_select_bk(team, roster_slots, team_picks, all_players, round_num, cap, sa
     else:
         affordable = undrafted
     avg_salary = float('inf')
+
+    # Berserker: most of the time, a random player for a random open slot
+    if is_berserker(team) and berserker_roll():
+        pick = berserker_pick(affordable, open_position_lottery_bk(roster_slots, team_picks), can_fill_bk)
+        if pick is not None:
+            return pick
 
     # tiered players first (tier 1, then tier 2), as long as they fit an open slot
     pick = tier_pick(affordable, tier_group_bk, Counter(open_position_lottery_bk(roster_slots, team_picks)))
@@ -694,6 +697,13 @@ AI_FOCUS_TABLE_FB = {
 }
 
 
+def can_fill_fb(player, label):
+    """Berserker: can this player take an open slot of this kind?"""
+    if label == 'FLEX':
+        return player.get('kind') in ('passer', 'rusher', 'receiver')
+    return fits_slot_fb(player, label, strict=True)
+
+
 def ai_select_fb(team, roster_slots, team_picks, all_players, round_num, cap, salary_cap_enabled):
     """Port of aiSelect() for football -- one team's single pick."""
     ai_focus = team.get('AIFocus', 1)
@@ -712,6 +722,12 @@ def ai_select_fb(team, roster_slots, team_picks, all_players, round_num, cap, sa
     else:
         affordable = undrafted
     avg_salary = float('inf')
+
+    # Berserker: most of the time, a random player for a random open slot
+    if is_berserker(team) and berserker_roll():
+        pick = berserker_pick(affordable, open_position_lottery_fb(roster_slots, team_picks), can_fill_fb)
+        if pick is not None:
+            return pick
 
     # tiered players first (tier 1, then tier 2), as long as they fit an open slot
     pick = tier_pick(affordable, tier_group_fb, Counter(open_position_lottery_fb(roster_slots, team_picks)))

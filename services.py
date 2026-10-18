@@ -1,11 +1,7 @@
-from flask import Flask
 import json
 import random
 import unicodedata
-from datetime import datetime
 from pathlib import Path
-from functools import lru_cache
-from operator import itemgetter
 import requests
 import numpy as np
 from collections import Counter
@@ -20,7 +16,7 @@ input_file_football_rushing = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/
 input_file_football_def_ol = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltime_football_def_ol.json"
 input_file_football_special = "https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/alltime_football_special.json"
 
-#---- Normanlizes Football Positions -----
+#---- Normalizes Football Positions -----
 FOOTBALL_POS_MAP = {
     'KP':  'KP',
     'DO':  'DO',
@@ -297,7 +293,8 @@ def initial_save_baseball_meta_json(
     ai_set,
     pool,
     cap,
-    player_file
+    player_file,
+    berserker=False
 ):
     filename = f"{draftname}_bb_meta.json"
 
@@ -322,7 +319,8 @@ def initial_save_baseball_meta_json(
             "team_id": team_id,
             "team_name": team,
             "type": "ai",
-            "AIFocus": random.randint(1, 16)
+            "AIFocus": random.randint(1, 16),
+            "Berserker": bool(berserker)
         })
         team_id += 1
 
@@ -336,6 +334,7 @@ def initial_save_baseball_meta_json(
         "ai_teams": len(ai_set),
         "pool": pool,
         "cap": cap,
+        "berserker": bool(berserker),
         "player_file": str(player_file),
         "current_pick": 1,
         "current_team_id": teams[0]["team_id"],
@@ -390,11 +389,6 @@ def save_baseball_meta(draftname, meta):
 
 
 # ------------------- BASKETBALL ---------------------------
-
-
-
-
-
 
 
 def unit_label(d):
@@ -460,9 +454,6 @@ def load_basketball(pool, num_teams):
     return people
 
 
-
-
-
 def initial_save_basketball_json(players, draftname):
     people = []
 
@@ -495,7 +486,8 @@ def initial_save_basketball_meta_json(
     ai_set,
     pool,
     cap,
-    player_file
+    player_file,
+    berserker=False
 ):
     filename = f"{draftname}_bk_meta.json"
 
@@ -520,7 +512,8 @@ def initial_save_basketball_meta_json(
             "team_id": team_id,
             "team_name": team,
             "type": "ai",
-            "AIFocus": random.randint(1, 16)
+            "AIFocus": random.randint(1, 16),
+            "Berserker": bool(berserker)
         })
         team_id += 1
 
@@ -534,6 +527,7 @@ def initial_save_basketball_meta_json(
         "ai_teams": len(ai_set),
         "pool": pool,
         "cap": cap,
+        "berserker": bool(berserker),
         "player_file": str(player_file),
         "current_pick": 1,
         "current_team_id": teams[0]["team_id"],
@@ -619,7 +613,6 @@ def save_basketball_meta(draftname, meta):
 
 
 #------------ Football -------------------------------------
-
 
 
 def load_football(pool, num_teams):
@@ -755,7 +748,7 @@ def load_football(pool, num_teams):
             random.sample(kp, min(num_kp, len(kp)))
         )
 
-         # a two-way player's other record always comes along
+        # a two-way player's other record always comes along
         universe = []
         for _id, p in passers.items():
             universe.append({"kind": "passer", "short_pos": "QB", "id": f"qb_{_id}", **p})
@@ -778,7 +771,8 @@ def initial_save_football_meta_json(
     ai_set,
     pool,
     cap,
-    player_file
+    player_file,
+    berserker=False
 ):
     filename = f"{draftname}_fb_meta.json"
 
@@ -803,7 +797,8 @@ def initial_save_football_meta_json(
             "team_id": team_id,
             "team_name": team,
             "type": "ai",
-            "AIFocus": random.randint(1, 16)
+            "AIFocus": random.randint(1, 16),
+            "Berserker": bool(berserker)
         })
         team_id += 1
 
@@ -817,6 +812,7 @@ def initial_save_football_meta_json(
         "ai_teams": len(ai_set),
         "pool": pool,
         "cap": cap,
+        "berserker": bool(berserker),
         "player_file": str(player_file),
         "current_pick": 1,
         "current_team_id": teams[0]["team_id"],
@@ -857,7 +853,6 @@ def get_saved_football_drafts():
 
     saved_drafts.sort(reverse=True)
     return saved_drafts
-
 
 
 def load_saved_football_draft(filename):
@@ -944,13 +939,11 @@ def normalize_football_pos(raw_pos, default='WR'):
 # -------- MISC -----------------------------------------------------
 
 
-
 def get_team_names(num_teams, sport, human_team_name):
-    empty = []
     if sport == "bk":
         bk_names = np.array(["Aliens", "Armadillos", "Aztecs", "Black Crows", "Bloom", "Blues", "Cyclones",
-        "Dolphins", "Dragons", "Drillers", "Explorers", "Gorillas", "Heroes", "Hunters", "Ice Hawks", "Monarchs", 
-        "Muskateers", "Nationalists", "Pandas", "Quake", "Rays", "Razor Bats", "Rebels", "Sabers", "Shock", 
+        "Dolphins", "Dragons", "Drillers", "Explorers", "Gorillas", "Heroes", "Hunters", "Ice Hawks", "Monarchs",
+        "Muskateers", "Nationalists", "Pandas", "Quake", "Rays", "Razor Bats", "Rebels", "Sabers", "Shock",
         "Sorcerers", "Stallions", "Thieves", "Undead", "Vikings", "Wolfpack", "Zombies"])
         if not human_team_name:
             return bk_names
@@ -959,8 +952,8 @@ def get_team_names(num_teams, sport, human_team_name):
         return np.random.choice(available, size=num_teams, replace=False)
     elif sport == "bb":
         bb_names = np.array(["Aces", "Arrows", "Badgers", "Bandits", "Barons", "Bombers", "Buccaneers", "Buckeyes",
-            "Claws", "Comets", "Copperheads", "Expos", "Falcons", "Gators", "Greyhounds", "Irish", "Jesters", "Monsters", 
-            "Neptunes", "Nitros", "Oilers", "Pioneers", "Quest", "Rams", "Rockers", "Scorpions", "Sharks", "Stars", 
+            "Claws", "Comets", "Copperheads", "Expos", "Falcons", "Gators", "Greyhounds", "Irish", "Jesters", "Monsters",
+            "Neptunes", "Nitros", "Oilers", "Pioneers", "Quest", "Rams", "Rockers", "Scorpions", "Sharks", "Stars",
             "Storm", "Twisters", "Warriors", "Wizards"])
         if not human_team_name:
             return bb_names
@@ -976,16 +969,6 @@ def get_team_names(num_teams, sport, human_team_name):
         available = fb_names[~np.isin(fb_names, human_team_name)]
         return np.random.choice(available, size=num_teams, replace=False)
 
-    return empty
-
-
-def get_person(kind: str, _id: str):
-    """Lookup helper for detail pages."""
-    if kind == "hitter":
-        return load_hitters().get(_id)
-    if kind == "pitcher":
-        return load_pitchers().get(_id)
-    return None
 
 def compute_short_pos(kind: str, person: dict) -> str:
     if kind == "hitter":
@@ -1008,54 +991,6 @@ def compute_short_pos(kind: str, person: dict) -> str:
         return "SP"  # safe default
     return ""
 
-
-def positions(fielding: str):
-    match fielding:
-        case "C":
-            return "Catcher"
-        case "1B":
-            return "First Baseman"
-        case "2B":
-            return "Second Baseman"
-        case "SS":
-            return "Shortstop"
-        case "3B":
-            return "Third Baseman"
-        case "LF":
-            return "Left Fielder"
-        case "CF":
-            return "Center Fielder"
-        case "RF":
-            return "Right Fielder"
-        case "S":
-            return "Starting Pitcher"
-        case "R":
-            return "Relief Pitcher"
-        case "C":
-            return "Closing Pitcher"
-        case _:
-            return "Designated Hitter"
-
-def sort_people(stat: str, people: dict):
-
-    if (stat != "p_earned_run_avg" and stat != "p_whip" and stat != "p_bb_per_nine"):
-        people.sort(key=lambda r: float(r.get(stat, 0) or 0), reverse=True)
-    else:
-        people.sort(key=lambda r: float(r.get(stat, 0) or 0))
-
-    return people
-
-def pos_player_pool(pos: str, people: list[dict]) -> list[dict]:
-    # filter down to just this position
-    pool_temp = [h for h in people if h.get("short_pos") == pos]
-
-    # how many to take (20%)
-    num_players = round(len(pool_temp) * 0.2)
-
-    # pick random unique players
-    pool = random.sample(pool_temp, k=num_players) if num_players > 0 else []
-
-    return pool
 
 def get_next_team_id(meta):
     num_teams = meta["num_teams"]
