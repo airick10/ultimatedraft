@@ -47,13 +47,30 @@
       </section>
 
       <section class="su-step">
-        <h2 class="su-h"><span class="su-num">3</span>Salary cap</h2>
-        <div class="su-seg">
-          <input type="radio" name="cap" id="cap-no" value="No" checked>
-          <label for="cap-no">No cap</label>
-          <input type="radio" name="cap" id="cap-yes" value="Yes">
-          <label for="cap-yes">Use a cap</label>
+        <h2 class="su-h"><span class="su-num">3</span>Salary cap &amp; AI mode</h2>
+
+        <div style="display:flex;flex-wrap:wrap;gap:0 40px">
+          <div>
+            <div class="su-label">Salary cap</div>
+            <div class="su-seg">
+              <input type="radio" name="cap" id="cap-no" value="No" checked>
+              <label for="cap-no">No cap</label>
+              <input type="radio" name="cap" id="cap-yes" value="Yes">
+              <label for="cap-yes">Use a cap</label>
+            </div>
+          </div>
+
+          <div>
+            <div class="su-label">Berserker mode</div>
+            <div class="su-seg">
+              <input type="radio" name="berserker" id="bz-no" value="No" checked>
+              <label for="bz-no">Off</label>
+              <input type="radio" name="berserker" id="bz-yes" value="Yes">
+              <label for="bz-yes">On</label>
+            </div>
+          </div>
         </div>
+        <p class="cf-muted" style="margin:10px 0 0">Berserker: 7 out of 10 AI picks are completely random (still legal for roster slots and the cap). The other 3 pick the normal way.</p>
 
         <div id="capWrap" hidden>
           <div class="su-money">

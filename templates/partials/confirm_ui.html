@@ -1,5 +1,5 @@
 {# Shared UI for the three confirm pages. Expects `cfg` (set by the sport's template) plus the usual
-   route variables: mode, num_teams, human_teams, ai_set, pool, cap, players, saved_names #}
+   route variables: mode, num_teams, human_teams, ai_set, pool, cap, players, saved_names, berserker #}
 {% set pool_label = {'full': 'Complete', 'random': 'Random', 'custom': 'Custom'}.get(pool, pool) %}
 
 <div class="cf-wrap theme-{{ cfg.sport|lower }}">
@@ -18,6 +18,7 @@
     <span class="cf-chip"><b>{{ num_teams }}</b> teams</span>
     <span class="cf-chip">Pool: <b>{{ pool_label }}</b></span>
     <span class="cf-chip">Salary cap: <b>{{ '${:,.0f}'.format(cap|float) if cap else 'None' }}</b></span>
+    {% if berserker %}<span class="cf-chip"><b>Berserker</b> mode</span>{% endif %}
   </div>
 
   {# ================= FINAL CONFIRM: name first, details below ================= #}
@@ -27,6 +28,7 @@
       <input type="hidden" name="num_teams" value="{{ num_teams }}">
       <input type="hidden" name="pool" value="{{ pool }}">
       <input type="hidden" name="cap" value="{{ cap }}">
+      {% if berserker %}<input type="hidden" name="berserker" value="Yes">{% endif %}
       {% for team in human_teams %}<input type="hidden" name="human_teams" value="{{ team }}">{% endfor %}
       {% for team in ai_set %}<input type="hidden" name="ai_set" value="{{ team }}">{% endfor %}
       {% if pool != 'full' %}
@@ -106,6 +108,7 @@
       <input type="hidden" name="num_teams" value="{{ num_teams }}">
       <input type="hidden" name="pool" value="{{ pool }}">
       <input type="hidden" name="cap" value="{{ cap }}">
+      {% if berserker %}<input type="hidden" name="berserker" value="Yes">{% endif %}
       {% for team in human_teams %}<input type="hidden" name="human_teams" value="{{ team }}">{% endfor %}
       {% for team in ai_set %}<input type="hidden" name="ai_set" value="{{ team }}">{% endfor %}
 
