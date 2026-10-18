@@ -30,25 +30,25 @@ deactivate
 ### The same steps with the parts the short version leaves out
 
 ```
-# 1. go to the Flask directory (the folder that holds wsgi.py and .flaskenv)
+1. go to the Flask directory (the folder that holds wsgi.py and .flaskenv)
 cd path/to/ultimatedraft
 
-# 2. create the environment (one time only)
+2. create the environment (one time only)
 python3 -m venv .venv
 
-# 3. activate it (every new terminal)
+3. activate it (every new terminal)
 source .venv/bin/activate          # Mac / Linux
 .venv\Scripts\activate             # Windows
 
-# 4. install the libraries (one time, and again whenever requirements.txt changes)
+4. install the libraries (one time, and again whenever requirements.txt changes)
 pip install -r requirements.txt
 
-# 5. run
+5. run
 flask run                          # or:  python wsgi.py
 
-# 6. open  http://localhost:5050
+6. open  http://localhost:5050
 
-# 7. when you're done
+7. when you're done
 deactivate
 ```
 
