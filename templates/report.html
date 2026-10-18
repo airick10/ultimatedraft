@@ -17,9 +17,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-ap
 .nav-inner{max-width:1400px;margin:0 auto;padding:8px 16px;min-height:56px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .brand{color:#fff;text-decoration:none;font-weight:700;font-size:1.05rem;margin-right:auto}
 .brand span{color:var(--gold);font-weight:500;margin-left:8px}
-.nav button,.nav input{font:inherit;border-radius:6px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;padding:6px 12px}
-.nav button{cursor:pointer}
-.nav button:hover{background:rgba(255,255,255,.18)}
+.nav button,.nav input,.nav a.navlink{font:inherit;border-radius:6px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;padding:6px 12px}
+.nav button,.nav a.navlink{cursor:pointer}
+.nav a.navlink{text-decoration:none}
+.nav button:hover,.nav a.navlink:hover{background:rgba(255,255,255,.18)}
 .nav input{width:170px}
 .nav input::placeholder{color:rgba(255,255,255,.6)}
 .seg{display:flex}
@@ -78,16 +79,27 @@ table.stat tfoot td{background:#eef2f7;font-weight:700;color:#111827;border-top:
   text-decoration:none;font-weight:600}
 .json-bar a:hover{border-color:var(--gold);background:#fff}
 footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
+
+/* ---- team rankings ---- */
+.rankings{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:26px auto 0;max-width:1400px;
+  padding:16px 16px 20px;scroll-margin-top:96px}
+.rankings h2{margin:0 0 4px;font-size:1.2rem}
+.rank-note{margin:0 0 4px;color:var(--muted);font-size:.85rem}
+.rk-link{display:inline-flex;align-items:center;gap:8px}
+.rk-logo{height:24px;width:auto}
+table.stat td.best{background:#dcfce7!important;font-weight:700}
+table.stat td.worst{background:#fee2e2!important}
+
 @media print{.nav{display:none}.team-body{display:block!important}.team{break-inside:avoid-page}}
+
 /* ---- phones and small tablets ---- */
 @media (max-width: 700px) {
   .nav-inner { padding: 8px 10px; gap: 8px; }
   .brand { flex: 1 1 100%; margin-right: 0; }
   .brand span { display: block; margin-left: 0; font-size: .8rem; }
   .nav input { flex: 1 1 140px; width: auto; min-width: 0; font-size: 16px; }
-  .nav button { padding: 8px 12px; }
+  .nav button, .nav a.navlink { padding: 8px 12px; }
 
-  /* the Teams menu spans the screen instead of running off the left edge */
   .menu { position: static; }
   .menu-list { left: 10px; right: 10px; top: 100%; min-width: 0; margin-top: 4px; }
 
@@ -97,6 +109,7 @@ footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
   .team-head h2 { font-size: 1.05rem; }
   .meta { flex: 1 1 100%; order: 3; margin-left: 0; font-size: .8rem; }
   .team-body { padding: 4px 10px 14px; }
+  .rankings { padding: 12px 8px 16px; scroll-margin-top: 130px; }
 
   table.stat th, table.stat td { padding: 5px 7px; }
   table.stat th.name, table.stat td.name { min-width: 130px; }
@@ -147,6 +160,7 @@ footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
         {% for t in teams %}<a href="#{{ t.slug }}" data-slug="{{ t.slug }}">{{ t.name }}</a>{% endfor %}
       </div>
     </div>
+    {% if rankings %}<a class="navlink" href="#rankings">Rankings</a>{% endif %}
     <div class="seg" id="viewSeg">
       <button type="button" data-view="both" class="on">Both</button>
       <button type="button" data-view="real">Real Stats</button>
@@ -186,6 +200,38 @@ footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
   </div>
 </section>
 {% endfor %}
+
+{% if rankings %}
+<section class="rankings" id="rankings">
+  <h2>Team Rankings</h2>
+  <p class="rank-note">All {{ teams|length }} teams side by side. Click any column header to sort (best first). Green is the best team in that column, red is the worst. Rank is each team's average finishing position across every ranked column.</p>
+  {% for b in rankings %}
+  <div class="sec sec-{{ b.cls }}">
+    <h3>{{ b.title }}</h3>
+    <div class="tbl-wrap">
+    <table class="stat rank-table">
+      <thead><tr>
+        <th class="name">Team</th>
+        <th class="num lowfirst">Rank</th>
+        <th class="num lowfirst">Avg Rk</th>
+        {% for h in b.headers %}<th class="num{{ ' lowfirst' if h.low }}">{{ h.name }}</th>{% endfor %}
+      </tr></thead>
+      <tbody>
+      {% for r in b.rows %}
+        <tr>
+          <td class="name" data-sort="{{ r.name|lower }}"><a class="rk-link" href="#{{ r.slug }}">{% if r.logo %}<img class="rk-logo" src="{{ r.logo }}" alt="" onerror="this.hidden=true;">{% endif %}<span>{{ r.name }}</span></a>{% if r.is_human %}<span class="badge">Human</span>{% endif %}</td>
+          <td class="num strong" data-sort="{{ r.rank if r.rank is not none else '' }}">{{ r.rank if r.rank is not none else '—' }}</td>
+          <td class="num" data-sort="{{ r.avg_sort if r.avg_sort is not none else '' }}">{{ r.avg }}</td>
+          {% for c in r.cells %}<td class="num {{ c.flag }}" data-sort="{{ c.sort if c.sort is not none else '' }}">{{ c.text }}</td>{% endfor %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
 </main>
 
 <footer>Generated {{ generated }}</footer>
@@ -210,6 +256,12 @@ footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
     setMenu(false);
   });
 
+  // ---- team names in the rankings table jump to (and open) that team ----
+  $$('a.rk-link').forEach(a => a.addEventListener('click', () => {
+    const team = document.getElementById(a.getAttribute('href').slice(1));
+    if (team) team.classList.remove('collapsed');
+  }));
+
   // ---- view switch: both / real / strat ----
   const seg = $('#viewSeg');
   seg.addEventListener('click', e => {
@@ -223,7 +275,8 @@ footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
   $$('table.stat').forEach(table => {
     const heads = $$('thead th', table);
     heads.forEach((th, i) => th.addEventListener('click', () => {
-      const first = th.classList.contains('num') ? 'desc' : 'asc';   // stats: biggest first
+      // stats: biggest first. Rank and "lower is better" columns: best (smallest) first
+      const first = (th.classList.contains('num') && !th.classList.contains('lowfirst')) ? 'desc' : 'asc';
       const dir = th.dataset.dir ? (th.dataset.dir === 'asc' ? 'desc' : 'asc') : first;
       heads.forEach(h => delete h.dataset.dir);
       th.dataset.dir = dir;
@@ -289,7 +342,6 @@ footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
   }, { rootMargin: '-90px 0px -70% 0px' });
   $$('.team').forEach(t => io.observe(t));
 })();
-
 {% endraw %}
 </script>
 </body>
