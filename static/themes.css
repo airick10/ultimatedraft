@@ -1,27 +1,87 @@
-/* One block per sport. Anything you remove falls back to the defaults in confirm.css.
-   Fonts must be loaded in base.html (see Part D) or declared with @font-face below. */
+/* ===========================================================================================
+   themes.css  --  the per-sport COLORS and FONTS for the setup, confirm and landing pages.
+
+   WHAT THIS FILE DOES
+     confirm.css defines one default look (a gold accent, a system font). This file lets each sport
+     override a few of those defaults, so the baseball pages are gold with a slab-serif title font,
+     basketball is orange with a tall condensed title font, and football is green.
+
+   HOW IT WORKS (CSS variables)
+     A "variable" is a named value, written  --accent: #c9a84c;  and used anywhere with  var(--accent).
+     The variables are defined on the page wrapper element  <div class="cf-wrap theme-baseball">, which
+     templates/partials/setup_ui.html and confirm_ui.html build from the sport name (cfg.sport|lower).
+     Because the sport class is on the WRAPPER, its values replace the defaults for everything inside it.
+     (The landing page, index.html, has no theme class, so it uses the defaults in confirm.css.)
+
+   LOADED BY
+     confirm.css, with  @import url("themes.css")  on its very first line. So any page that loads
+     confirm.css gets this file too. No template links it directly.
+
+   WHERE TO CHANGE THINGS
+     A sport's main color ........ --accent and its three relatives, in that sport's block below
+     A sport's fonts ............. --font-display (titles) and --font (everything else), below
+     The dark layer over the page picture ... --overlay
+     Anything NOT listed in a block here (text color, card color, borders...) comes from the defaults
+     in confirm.css's :root block. Delete a line from a block below and that sport falls back to the
+     default.
+
+   THE FONTS NAMED BELOW ('Alfa Slab One', 'Barlow', 'Bebas Neue', 'Teko') ARE LOADED FROM GOOGLE by the
+   one <link> line in templates/base.html. To use a new font, add it to that link first (see the README:
+   "How would I just link Google Fonts"), then name it here.
+   =========================================================================================== */
 
 /* Custom downloaded font, if you want one:
 @font-face { font-family: 'MyBaseball'; src: url('fonts/Baseball.otf') format('opentype'); font-display: swap; }
 */
+/* NOTE (about the example above): it is commented out, so it does nothing. To use a downloaded font, copy
+   the font file into static/fonts/, remove the comment marks around the @font-face line, change the name
+   and file name to match, and then use the name in a --font or --font-display line below. The path is
+   relative to THIS file (static/). (The original note here mentioned "Part D" and "base.html"; that refers
+   to the setup instructions this file was first written with.) */
 
+/* ------------------------------------------------------------------------------------------
+   BASEBALL  (class "theme-baseball", used on baseball.html and bb_confirm.html)
+   ------------------------------------------------------------------------------------------ */
 .theme-baseball{
-  --accent:#c9a84c;  --accent-hover:#d9b95a;  --accent-ink:#111;  --accent-soft:rgba(201,168,76,.15);
+  /* --accent:       the main color: primary buttons, step numbers, selected cards, chip numbers, links */
+  --accent:#c9a84c;
+  /* --accent-hover: the slightly lighter version shown when the mouse is over a primary button */
+  --accent-hover:#d9b95a;
+  /* --accent-ink:   the color of text that sits ON the accent color (dark text on gold) */
+  --accent-ink:#111;
+  /* --accent-soft:  a faint see-through tint of the accent: selected pool cards, the focus glow on inputs */
+  --accent-soft:rgba(201,168,76,.15);
+  /* --overlay:      the dark layer drawn over the page's background picture so the text stays readable.
+                     rgba(red, green, blue, opacity): the last number is how dark (0 = clear, 1 = solid) */
   --overlay:rgba(24,14,6,.55);
+  /* --font-display: the font for titles and section headings, then fallbacks if it can't load */
   --font-display:'Alfa Slab One', Georgia, serif;
+  /* --font:         the font for everything else */
   --font:'Barlow', system-ui, sans-serif;
 }
 
+/* ------------------------------------------------------------------------------------------
+   BASKETBALL  (class "theme-basketball", used on basketball.html and bk_confirm.html)
+   ------------------------------------------------------------------------------------------ */
 .theme-basketball{
-  --accent:#f97316;  --accent-hover:#fb923c;  --accent-ink:#111;  --accent-soft:rgba(249,115,22,.16);
-  --overlay:rgba(20,10,4,.55);
-  --font-display:'Bebas Neue', Impact, sans-serif;
+  --accent:#f97316;                         /* orange */
+  --accent-hover:#fb923c;                   /* lighter orange for hover */
+  --accent-ink:#111;                        /* dark text on orange */
+  --accent-soft:rgba(249,115,22,.16);       /* faint orange tint */
+  --overlay:rgba(20,10,4,.55);              /* dark brown layer over the picture */
+  --font-display:'Bebas Neue', Impact, sans-serif;   /* tall condensed titles */
   --font:'Barlow', system-ui, sans-serif;
 }
 
+/* ------------------------------------------------------------------------------------------
+   FOOTBALL  (class "theme-football", used on football.html and fb_confirm.html)
+   ------------------------------------------------------------------------------------------ */
 .theme-football{
-  --accent:#22c55e;  --accent-hover:#4ade80;  --accent-ink:#052e16;  --accent-soft:rgba(34,197,94,.16);
-  --overlay:rgba(4,16,8,.55);
-  --font-display:'Teko', Impact, sans-serif;
+  --accent:#22c55e;                         /* green */
+  --accent-hover:#4ade80;                   /* lighter green for hover */
+  --accent-ink:#052e16;                     /* very dark green text on green */
+  --accent-soft:rgba(34,197,94,.16);        /* faint green tint */
+  --overlay:rgba(4,16,8,.55);               /* dark green layer over the picture */
+  --font-display:'Teko', Impact, sans-serif;         /* condensed sports-style titles */
   --font:'Barlow', system-ui, sans-serif;
 }

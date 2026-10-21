@@ -1,101 +1,518 @@
-/* Shared look for the baseball / basketball / football confirm pages */
-body::before{content:"";position:fixed;inset:0;background:rgba(5,8,16,.55);z-index:-1}
+/* ===========================================================================================
+   confirm.css  --  the look of the CONFIRM pages (and the base look that setup.css builds on).
 
-.cf-wrap{--gold:#c9a84c;--ink:#f1f5f9;--muted:#cbd5e1;--card:rgba(14,18,30,.84);--line:rgba(255,255,255,.14);
-  max-width:1180px;margin:0 auto;padding:22px 16px 70px;color:var(--ink);
-  font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+   WHAT THIS FILE STYLES
+     - The confirm pages: bb_confirm.html, bk_confirm.html, fb_confirm.html (all three use
+       templates/partials/confirm_ui.html): the "Name your draft" card, the teams panel, the player pool
+       summary, and the CUSTOM POOL PICKER (boxes of checkboxes).
+     - The shared "cf-" building blocks (cards, buttons, chips, inputs) that the SETUP pages
+       (setup.css) and the landing page (index.html) reuse.
+
+   NAMING
+     "cf-"  = confirm / common pieces (this file)       "su-" = setup-page pieces (setup.css)
+
+   THE THEME BLOCK  (the part you are most likely to edit)
+     Every color and font on these pages comes from the variables in the :root block just below. Change a
+     value THERE and the whole site updates. Per-sport overrides (orange basketball, green football...) are
+     in themes.css.
+
+   LOADED BY
+     The three confirm pages, the three setup pages and index.html (each in its "css" block), after
+     base.html's own stylesheets. responsive.css loads after this file and adjusts it for phones.
+
+   JAVASCRIPT THAT SETS STATES HERE
+     static/confirm.js sets  data-state="empty|part|ok"  on .cf-group and .cf-pill, which the
+     "progress states" rules at the bottom of this file color.
+   =========================================================================================== */
+
+/* PURPOSE:  Load themes.css (the per-sport color / font overrides) so this one file is all a page needs.
+   NOTE:     An @import rule MUST be the first rule in the file. The address is relative to THIS file
+             (static/), so themes.css sits next to it. */
+@import url("themes.css");
+
+/* Confirm + setup pages. Everything you're likely to restyle is in this THEME block;
+   per-sport overrides live in themes.css. */
+
+/* ------------------------------------------------------------------------------------------
+   THE THEME BLOCK. The default values; themes.css overrides some of them per sport.
+   ------------------------------------------------------------------------------------------ */
+:root{
+  /* body text. system-ui = whatever font the visitor's computer uses for its own menus. */
+  --font:         system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;   /* body text */
+  /* titles and section headings (.cf-title, .cf-h2, .cf-group h3, .su-h, .su-sport span).
+     "var(--font)" means "same as the body font" until a theme gives it its own. */
+  --font-display: var(--font);              /* titles and section headings */
+
+  /* THE ACCENT FAMILY: the one bold color of the pages */
+  --accent:       #c9a84c;                  /* buttons, selected items, step numbers */
+  --accent-ink:   #111111;                  /* text that sits on the accent color */
+  --accent-hover: #d9b95a;                  /* primary button when the mouse is over it */
+  --accent-soft:  rgba(201,168,76,.15);     /* faint tint: selected cards, focus glow */
+
+  /* "YOUR TEAM" highlight: the blue ring and tint on the teams you control */
+  --mine:         #2196f3;                  /* "your team" highlight */
+  --mine-soft:    rgba(33,150,243,.2);
+
+  /* TEXT COLORS */
+  --ink:          #f1f5f9;                  /* normal text */
+  --head:         #ffffff;                  /* headings and strong text */
+  --muted:        #cbd5e1;                  /* secondary text */
+
+  /* SURFACES */
+  --card:         rgba(14,18,30,.84);       /* card background */
+  --bar:          rgba(10,14,24,.96);       /* sticky bottom bar */
+  --line:         rgba(255,255,255,.14);    /* borders */
+  --overlay:      rgba(5,8,16,.55);         /* dark layer over the background picture */
+}
+
+/* ------------------------------------------------------------------------------------------
+   THE PAGE WRAPPER
+   ------------------------------------------------------------------------------------------ */
+
+/* PURPOSE:  The container for a whole page's content: centered, at most 1180px wide, with the page's
+             text color and font. The sport theme class (theme-baseball ...) is on this same element.
+   USED BY:  <div class="cf-wrap theme-..."> in partials/confirm_ui.html and partials/setup_ui.html;
+             <div class="cf-wrap"> in index.html.
+   CHANGE:   max-width for a wider / narrower page; padding for the space around it. */
+.cf-wrap{
+  max-width:1180px;                /* never wider than this */
+  margin:0 auto;                   /* centered */
+  padding:22px 16px 70px;          /* top, sides, bottom (the big bottom leaves room for the sticky bar) */
+  color:var(--ink);                /* normal text color */
+  font:15px/1.5 var(--font);       /* shorthand: size 15px, line height 1.5, the theme font */
+}
+
+/* PURPOSE:  A dark see-through layer fixed over the WHOLE window, behind the content, so the sport's
+             background picture is dimmed and the text is readable.
+   USED BY:  generated automatically by the ::before on every .cf-wrap.
+   CHANGE:   darken or lighten with --overlay (in :root, or per sport in themes.css). z-index:-1 puts it
+             behind the content. */
+.cf-wrap::before{
+  content:"";                      /* a pseudo-element needs content to exist */
+  position:fixed;                  /* stays put while the page scrolls */
+  inset:0;                         /* stretch to all four edges of the window */
+  background:var(--overlay);
+  z-index:-1;
+}
+
+/* PURPOSE:  Make the HTML "hidden" attribute always win inside the page, so elements the scripts hide
+             and show (the cap box, the duplicate-name warning, filtered list items) really disappear.
+   USED BY:  confirm.js / setup.js, which set element.hidden = true / false. */
 .cf-wrap [hidden]{display:none!important}
 
-.cf-back{display:inline-block;color:var(--muted);text-decoration:none;margin-bottom:10px}
-.cf-back:hover{color:#fff}
-.cf-title{margin:0 0 4px;font-size:1.9rem;font-weight:800;letter-spacing:-.01em;color:#fff}
+/* ------------------------------------------------------------------------------------------
+   HEADINGS AND SMALL PIECES
+   ------------------------------------------------------------------------------------------ */
+
+/* PURPOSE:  The "< Back to Baseball" link at the top of a page.
+   USED BY:  <a class="cf-back"> in confirm_ui.html and setup_ui.html. */
+.cf-back{
+  display:inline-block;
+  color:var(--muted);
+  text-decoration:none;            /* no underline */
+  margin-bottom:10px;
+}
+.cf-back:hover{color:var(--head)}  /* brighter on hover */
+
+/* PURPOSE:  The big page title ("Baseball Draft", "Name your baseball draft") in the display font.
+   USED BY:  <h1 class="cf-title"> in confirm_ui.html, setup_ui.html and index.html (index.html adds its
+             own bigger inline size).
+   CHANGE:   font-size / font-weight here; the typeface via --font-display. */
+.cf-title{
+  margin:0 0 4px;
+  font-family:var(--font-display);
+  font-size:1.9rem;
+  font-weight:800;
+  letter-spacing:-.01em;           /* very slightly tighter letters */
+  color:var(--head);
+}
+
+/* PURPOSE:  The grey sentence under a title.
+   USED BY:  <p class="cf-sub"> in confirm_ui.html, setup_ui.html and index.html. */
 .cf-sub{margin:0 0 14px;color:var(--muted)}
 
+/* PURPOSE:  The row of small pill-shaped "chips" under the title that summarize the setup
+             ("4 teams", "Pool: Complete", "Salary cap: None", "Berserker mode").
+   USED BY:  <div class="cf-chips"> with <span class="cf-chip"> in confirm_ui.html; also used for the pool
+             group counts ("Catchers 8") on the final confirm page. The bold number inside uses the accent. */
 .cf-chips{margin-bottom:14px}
-.cf-chip{display:inline-block;padding:3px 12px;margin:0 6px 6px 0;border-radius:999px;
-  background:rgba(255,255,255,.1);border:1px solid var(--line);font-size:.85rem}
-.cf-chip b{color:var(--gold)}
+.cf-chip{
+  display:inline-block;
+  padding:3px 12px;
+  margin:0 6px 6px 0;
+  border-radius:999px;             /* 999px = fully rounded ends (a pill) */
+  background:rgba(255,255,255,.1);
+  border:1px solid var(--line);
+  font-size:.85rem;
+}
+.cf-chip b{color:var(--accent)}
 
-.cf-card{background:var(--card);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
-  border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:16px;
-  box-shadow:0 10px 30px rgba(0,0,0,.35)}
-.cf-h2{margin:0;font-size:1.1rem;font-weight:700;color:#fff}
-.cf-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px}
+/* ------------------------------------------------------------------------------------------
+   CARDS
+   ------------------------------------------------------------------------------------------ */
+
+/* PURPOSE:  The rounded, frosted-glass panel that holds each section of a page. The blur makes the
+             picture behind it soft.
+   USED BY:  <div class="cf-card"> everywhere: the name card, the teams panel, the pool summary, the new
+             draft form, the saved drafts panel, the pool picker's sticky bar (with .cf-sticky).
+   CHANGE:   --card for its color / see-through amount; border-radius for rounder corners;
+             backdrop-filter blur for more / less frosting. */
+.cf-card{
+  background:var(--card);
+  -webkit-backdrop-filter:blur(6px);       /* the Safari spelling */
+  backdrop-filter:blur(6px);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:18px 20px;
+  margin-bottom:16px;
+  box-shadow:0 10px 30px rgba(0,0,0,.35);  /* a soft shadow under the card */
+}
+
+/* PURPOSE:  A section heading inside a card ("Player pool", "Saved drafts").
+   USED BY:  <h2 class="cf-h2"> in confirm_ui.html and setup_ui.html. */
+.cf-h2{
+  margin:0;
+  font-family:var(--font-display);
+  font-size:1.1rem;
+  font-weight:700;
+  color:var(--head);
+}
+
+/* PURPOSE:  A heading on the left and a small count or note on the right, on one line.
+   USED BY:  <div class="cf-row"> in the "Player pool" and "Saved drafts" panels. */
+.cf-row{
+  display:flex;
+  align-items:baseline;            /* line the text baselines up */
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:10px;
+}
+
+/* PURPOSE:  Smaller grey helper text.
+   USED BY:  <span class="cf-muted"> / <p class="cf-muted"> in the cards (counts, "No saved drafts yet",
+             the cap suggestion note). */
 .cf-muted{color:var(--muted);font-size:.9rem}
 
-/* name card */
-.cf-namecard{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:end;
-  border-color:rgba(201,168,76,.55)}
-.cf-label{display:block;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);
-  font-weight:700;margin-bottom:6px}
-.cf-input{width:100%;font-size:1.2rem;padding:12px 14px;border-radius:10px;color:#fff;
-  border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.08);outline:none}
-.cf-input::placeholder{color:rgba(255,255,255,.45)}
-.cf-input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,168,76,.25)}
-.cf-input-sm{font-size:.95rem;padding:8px 12px;margin:10px 0}
-.cf-warn{margin-top:8px;padding:6px 10px;border-radius:8px;font-size:.85rem;color:#fde68a;
-  background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4)}
+/* ------------------------------------------------------------------------------------------
+   THE NAME CARD  ("Name your draft")
+   ------------------------------------------------------------------------------------------ */
+
+/* PURPOSE:  The final-confirm card: the name box on the left, Cancel / Start on the right, with an
+             accent-colored border so it stands out. (It becomes one column on narrow screens: see the
+             @media rule a few lines down.)
+   USED BY:  <form id="startForm" class="cf-card cf-namecard"> in confirm_ui.html. */
+.cf-namecard{
+  display:grid;
+  grid-template-columns:1fr auto;  /* the name box takes the space, the buttons are as wide as they need */
+  gap:18px;
+  align-items:end;                 /* bottoms line up */
+  border-color:var(--accent);
+}
+
+/* PURPOSE:  The small ALL-CAPS label above an input ("NAME YOUR DRAFT").
+   USED BY:  <label class="cf-label"> in confirm_ui.html. */
+.cf-label{
+  display:block;
+  font-size:.8rem;
+  letter-spacing:.08em;            /* spread the letters a little */
+  text-transform:uppercase;
+  color:var(--accent);
+  font-weight:700;
+  margin-bottom:6px;
+}
+
+/* PURPOSE:  The big text box. The brighter outline and glow appear when you click into it.
+   USED BY:  <input class="cf-input"> (the draft name, the salary cap amount), and
+             <input class="cf-input cf-input-sm"> (search boxes: "Search drafts...", "Search players...").
+   CHANGE:   font-size, padding, border color. (responsive.css sets the font to 16px on phones so iPhones
+             don't zoom in when you tap it.) */
+.cf-input{
+  width:100%;
+  font-size:1.2rem;
+  padding:12px 14px;
+  border-radius:10px;
+  color:var(--head);
+  border:1px solid rgba(255,255,255,.28);
+  background:rgba(255,255,255,.08);
+  outline:none;                    /* remove the browser's default outline; we draw our own on :focus */
+}
+.cf-input::placeholder{color:rgba(255,255,255,.45)}       /* the grey example text inside an empty box */
+.cf-input:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-soft);                /* a soft ring around the box */
+}
+.cf-input-sm{font-size:.95rem;padding:8px 12px;margin:10px 0}   /* the smaller search-box version */
+
+/* PURPOSE:  The amber warning under the name box: "A draft with this name already exists...".
+             Shown / hidden by confirm.js. (The amber colors are fixed, not theme variables.)
+   USED BY:  <div id="nameWarn" class="cf-warn"> in confirm_ui.html. */
+.cf-warn{
+  margin-top:8px;
+  padding:6px 10px;
+  border-radius:8px;
+  font-size:.85rem;
+  color:#fde68a;
+  background:rgba(245,158,11,.15);
+  border:1px solid rgba(245,158,11,.4);
+}
+
+/* PURPOSE:  A row of buttons (Cancel, Start draft; Random fill all, Continue). Wraps on small screens.
+   USED BY:  <div class="cf-actions"> in confirm_ui.html. */
 .cf-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+/* PURPOSE:  On narrow screens, stack the name box above the buttons instead of side by side. */
 @media (max-width:700px){.cf-namecard{grid-template-columns:1fr}}
 
-/* buttons */
-.cf-btn{display:inline-block;border:1px solid transparent;border-radius:10px;padding:11px 22px;font:inherit;
-  font-weight:700;cursor:pointer;text-decoration:none;white-space:nowrap}
-.cf-btn-primary{background:var(--gold);color:#111}
-.cf-btn-primary:hover:not(:disabled){background:#d9b95a}
+/* ------------------------------------------------------------------------------------------
+   BUTTONS
+   ------------------------------------------------------------------------------------------ */
+
+/* PURPOSE:  The shape shared by every button on these pages. Used together with a color class below.
+   USED BY:  <button class="cf-btn cf-btn-primary"> / <a class="cf-btn cf-btn-ghost"> in the confirm and
+             setup pages (Start draft, Continue, Open, Delete, Cancel...). */
+.cf-btn{
+  display:inline-block;
+  border:1px solid transparent;
+  border-radius:10px;
+  padding:11px 22px;
+  font:inherit;                    /* use the page font, not the browser's button font */
+  font-weight:700;
+  cursor:pointer;
+  text-decoration:none;            /* for <a> buttons */
+  white-space:nowrap;              /* never wrap the label onto two lines */
+}
+
+/* PURPOSE:  The bold main-action button (accent colored). Dimmed and not clickable while disabled, which is
+             how "Continue" / "Start draft" look until the form is ready (confirm.js, setup.js). */
+.cf-btn-primary{background:var(--accent);color:var(--accent-ink)}
+.cf-btn-primary:hover:not(:disabled){background:var(--accent-hover)}
 .cf-btn-primary:disabled{opacity:.4;cursor:not-allowed}
-.cf-btn-ghost{background:rgba(255,255,255,.08);border-color:var(--line);color:#fff}
+
+/* PURPOSE:  The quiet secondary button (see-through, with a border). Used for Cancel, Delete, Random fill all. */
+.cf-btn-ghost{
+  background:rgba(255,255,255,.08);
+  border-color:var(--line);
+  color:var(--head);
+}
 .cf-btn-ghost:hover{background:rgba(255,255,255,.16)}
 
-/* teams */
+/* ------------------------------------------------------------------------------------------
+   THE TEAMS PANEL  (confirm page: your teams, then the AI teams)
+   ------------------------------------------------------------------------------------------ */
+
+/* PURPOSE:  A wrapping row of team logos with their names under them.
+   USED BY:  <div class="cf-teams"> / <div class="cf-team human|ai"> in confirm_ui.html.
+   CHANGE:   logo sizes (img height) and the width of each cell. Human teams get a blue ring (--mine); AI
+             teams are drawn smaller (64px wide cells, 46px logos). */
 .cf-teams{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px}
 .cf-team{text-align:center;width:84px}
-.cf-team img{height:64px;width:auto;max-width:100%;object-fit:contain;border-radius:8px}
-.cf-team span{display:block;font-size:.72rem;color:var(--muted);margin-top:6px;line-height:1.2}
-.cf-team.human img{outline:3px solid #2196f3;outline-offset:3px}
+.cf-team img{
+  height:64px;
+  width:auto;
+  max-width:100%;
+  object-fit:contain;              /* shrink the picture to fit without stretching it */
+  border-radius:8px;
+}
+.cf-team span{
+  display:block;
+  font-size:.72rem;
+  color:var(--muted);
+  margin-top:6px;
+  line-height:1.2;
+}
+.cf-team.human img{outline:3px solid var(--mine);outline-offset:3px}   /* the blue "this is yours" ring */
 .cf-team.ai{width:64px}
 .cf-team.ai img{height:46px}
-.cf-subhead{margin:14px 0 0;font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 
-/* details / pool preview */
-.cf-details>summary{cursor:pointer;color:var(--gold);font-weight:600;list-style:none}
-.cf-details>summary::-webkit-details-marker{display:none}
-.cf-details>summary::before{content:"\25B8 ";}
-.cf-details[open]>summary::before{content:"\25BE ";}
-.cf-list{columns:220px;column-gap:22px;margin:0;padding:0;list-style:none;max-height:420px;overflow:auto}
-.cf-list li{break-inside:avoid;padding:2px 0;font-size:.9rem}
-.cf-list b{display:inline-block;min-width:34px;color:var(--gold);font-size:.72rem}
+/* PURPOSE:  The tiny ALL-CAPS labels "HUMAN TEAMS" / "AI TEAMS" inside the teams panel.
+   USED BY:  <p class="cf-subhead"> in confirm_ui.html. */
+.cf-subhead{
+  margin:14px 0 0;
+  font-size:.75rem;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
 
-/* custom pool picker */
-.cf-sticky{position:sticky;top:8px;z-index:30;display:flex;align-items:center;justify-content:space-between;
-  gap:14px;flex-wrap:wrap;padding:12px 16px}
+/* ------------------------------------------------------------------------------------------
+   COLLAPSIBLE SECTIONS AND THE POOL PREVIEW LIST
+   ------------------------------------------------------------------------------------------ */
+
+/* PURPOSE:  Style the clickable "Teams (8)" and "Browse all players" summary lines of a <details> box:
+             accent colored, no default arrow, with our own ▸ (closed) / ▾ (open) arrow.
+   USED BY:  <details class="cf-details"> in confirm_ui.html.
+   NOTE:     "\25B8" and "\25BE" are the characters ▸ and ▾ written as codes. */
+.cf-details>summary{
+  cursor:pointer;
+  color:var(--accent);
+  font-weight:600;
+  list-style:none;                 /* remove the default marker */
+}
+.cf-details>summary::-webkit-details-marker{display:none}   /* ...and the Safari/Chrome one */
+.cf-details>summary::before{content:"\25B8 "}               /* ▸ shown when closed */
+.cf-details[open]>summary::before{content:"\25BE "}         /* ▾ shown when open */
+
+/* PURPOSE:  The scrolling multi-column list of every player in the final pool ("C  Johnny Bench").
+             The position code at the start of each line uses the accent color.
+   USED BY:  <ul id="poolList" class="cf-list"> in confirm_ui.html (filtered by confirm.js).
+   CHANGE:   columns:220px = as many columns as fit when each is at least 220px wide; max-height for how tall
+             the list is before it scrolls. */
+.cf-list{
+  columns:220px;
+  column-gap:22px;
+  margin:0;
+  padding:0;
+  list-style:none;
+  max-height:420px;
+  overflow:auto;
+}
+.cf-list li{break-inside:avoid;padding:2px 0;font-size:.9rem}   /* never split one item across two columns */
+.cf-list b{
+  display:inline-block;
+  min-width:34px;
+  color:var(--accent);
+  font-size:.72rem;
+}
+
+/* ------------------------------------------------------------------------------------------
+   THE CUSTOM POOL PICKER  (boxes of checkboxes, one box per position group)
+   ------------------------------------------------------------------------------------------ */
+
+/* PURPOSE:  The bar of progress pills and buttons that STAYS AT THE TOP of the screen while you scroll the
+             picker (position: sticky). It's a .cf-card with this class added.
+   USED BY:  <div class="cf-card cf-sticky"> in confirm_ui.html (custom pool picker only).
+   CHANGE:   top:8px = the gap from the top of the window; z-index keeps it above the boxes. */
+.cf-sticky{
+  position:sticky;
+  top:8px;
+  z-index:30;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  flex-wrap:wrap;
+  padding:12px 16px;
+}
+
+/* PURPOSE:  The little progress pills ("Catchers 0/8"). confirm.js updates the numbers and sets
+             data-state on each (colored in the "progress states" section at the bottom of this file).
+   USED BY:  <div class="cf-pills"> / <span class="cf-pill"> in confirm_ui.html. */
 .cf-pills{display:flex;flex-wrap:wrap;gap:8px}
-.cf-pill{padding:3px 11px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.07);
-  font-size:.8rem}
+.cf-pill{
+  padding:3px 11px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.07);
+  font-size:.8rem;
+}
 .cf-pill b{margin-left:4px}
-.cf-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
-.cf-group{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
-.cf-group header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.cf-group h3{margin:0;font-size:1rem;font-weight:700;color:#fff}
-.cf-count{padding:1px 10px;border-radius:999px;font-size:.8rem;font-weight:700;background:#475569;color:#fff}
-.cf-gbtns{display:flex;gap:6px;flex-wrap:wrap}
-.cf-gbtns button{font:inherit;font-size:.78rem;padding:3px 10px;border-radius:8px;cursor:pointer;color:#fff;
-  background:rgba(255,255,255,.08);border:1px solid var(--line)}
-.cf-gbtns button:hover{background:rgba(255,255,255,.18)}
-.cf-gsearch{width:100%;margin:10px 0 6px;padding:6px 10px;font-size:.85rem;border-radius:8px;color:#fff;
-  border:1px solid var(--line);background:rgba(255,255,255,.07);outline:none}
-.cf-gsearch:focus{border-color:var(--gold)}
-.cf-glist{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px 6px}
-.cf-glist label{display:flex;gap:8px;align-items:center;padding:3px 4px;border-radius:6px;cursor:pointer;font-size:.9rem}
-.cf-glist label:hover{background:rgba(255,255,255,.08)}
-.cf-glist input{accent-color:var(--gold)}
 
-/* progress states (group badge, group card border, sticky pill) */
-.cf-group[data-state="part"] .cf-count{background:#d97706}
-.cf-group[data-state="ok"]   .cf-count{background:#16a34a}
-.cf-group[data-state="over"] .cf-count{background:#dc2626}
-.cf-group[data-state="ok"]{border-color:rgba(34,197,94,.6)}
-.cf-group[data-state="over"]{border-color:rgba(220,38,38,.7)}
+/* PURPOSE:  The grid that holds the position-group boxes. auto-fit / minmax = "as many boxes per row as fit,
+             each at least 260px wide", so it reflows from 4 across down to 1 on a phone.
+   USED BY:  <div class="cf-groups"> in confirm_ui.html. */
+.cf-groups{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:14px;
+}
+
+/* PURPOSE:  One position-group box ("Catchers"): title and counter on top, buttons, a filter box, then the
+             scrolling list of checkboxes.
+   USED BY:  <section class="cf-group" data-need="8" data-code="C"> in confirm_ui.html (confirm.js reads
+             data-need and data-code). */
+.cf-group{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:14px;
+}
+.cf-group header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.cf-group h3{
+  margin:0;
+  font-family:var(--font-display);
+  font-size:1rem;
+  font-weight:700;
+  color:var(--head);
+}
+
+/* PURPOSE:  The "3 / 8" counter in a box's corner. It starts grey; the progress states below change its
+             color. (#475569 is a fixed slate grey, not a theme variable.) */
+.cf-count{
+  padding:1px 10px;
+  border-radius:999px;
+  font-size:.8rem;
+  font-weight:700;
+  background:#475569;
+  color:#fff;
+}
+
+/* PURPOSE:  The small buttons in each box ("Random 8", "All", "Clear").
+   USED BY:  <div class="cf-gbtns"> with <button data-act="random|all|none"> (handled by confirm.js). */
+.cf-gbtns{display:flex;gap:6px;flex-wrap:wrap}
+.cf-gbtns button{
+  font:inherit;
+  font-size:.78rem;
+  padding:3px 10px;
+  border-radius:8px;
+  cursor:pointer;
+  color:var(--head);
+  background:rgba(255,255,255,.08);
+  border:1px solid var(--line);
+}
+.cf-gbtns button:hover{background:rgba(255,255,255,.18)}
+
+/* PURPOSE:  The "Filter catchers..." box in each group (the accent border appears when you click in).
+   USED BY:  <input class="cf-gsearch"> in confirm_ui.html. */
+.cf-gsearch{
+  width:100%;
+  margin:10px 0 6px;
+  padding:6px 10px;
+  font-size:.85rem;
+  border-radius:8px;
+  color:var(--head);
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.07);
+  outline:none;
+}
+.cf-gsearch:focus{border-color:var(--accent)}
+
+/* PURPOSE:  The scrolling list of checkboxes in a box. Hovering a row lights it; the checkboxes themselves
+             are tinted with the accent color (accent-color).
+   USED BY:  <div class="cf-glist"> with <label> rows in confirm_ui.html.
+   CHANGE:   max-height = how tall the list is before it scrolls (responsive.css makes it shorter on phones). */
+.cf-glist{
+  max-height:340px;
+  overflow:auto;
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:4px 6px;
+}
+.cf-glist label{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  padding:3px 4px;
+  border-radius:6px;
+  cursor:pointer;
+  font-size:.9rem;
+}
+.cf-glist label:hover{background:rgba(255,255,255,.08)}
+.cf-glist input{accent-color:var(--accent)}
+
+/* ------------------------------------------------------------------------------------------
+   PROGRESS STATES  (fixed status colors, not part of the theme)
+   confirm.js sets  data-state  on each .cf-group and .cf-pill:
+        "empty"  nothing picked yet (no rule here: it keeps the default grey)
+        "part"   some picked, not enough yet          -> amber
+        "ok"     the needed number (or more) is picked  -> green
+        "over"   (defined here, but confirm.js never sets it today)  -> red
+   CHANGE: edit the colors here. They're the traffic-light colors on purpose.
+   ------------------------------------------------------------------------------------------ */
+.cf-group[data-state="part"] .cf-count{background:#d97706}     /* amber counter */
+.cf-group[data-state="ok"]   .cf-count{background:#16a34a}     /* green counter */
+.cf-group[data-state="over"] .cf-count{background:#dc2626}     /* red counter */
+.cf-group[data-state="ok"]{border-color:rgba(34,197,94,.6)}    /* green box border when complete */
+.cf-group[data-state="over"]{border-color:rgba(220,38,38,.7)}  /* red box border when over */
 .cf-pill[data-state="part"]{border-color:#d97706;color:#fcd34d}
 .cf-pill[data-state="ok"]{border-color:#22c55e;color:#86efac}
 .cf-pill[data-state="over"]{border-color:#ef4444;color:#fca5a5}

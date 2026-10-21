@@ -1,8 +1,29 @@
+/* ===========================================================================================
+   fbstyle.css  --  the look of the FOOTBALL DRAFT BOARD (templates/fbdraft.html).
+
+   This is a near copy of bbstyle.css. READ THE BIG COMMENT AT THE TOP OF bbstyle.css FIRST: it has the
+   color cheat-sheet, the description of every part of the board, and the list of classes the JavaScript adds.
+   Comments below only describe each rule briefly, and say where football DIFFERS.
+
+   DIFFERENCES FROM bbstyle.css
+     1. The pool table's font is Jersey 25 ('Football'), loaded from static/fonts/Jersey25-Regular.ttf.
+     2. The pool table's columns are 8% / 22% / 14% / 11% / 11% / 11% / 11% / 12% (same as basketball)...
+        but the stat columns (4 and up) are then overridden to width:auto by the rule near the bottom.
+     3. FOOTBALL'S "ALL" TAB: that tab has just three columns, so the very last rules here
+        (.pane-center.all-compact) pack them to the left in a 520px-wide table instead of stretching
+        them across the pane. draft_common.js adds the class "all-compact" to .pane-center on that tab.
+     4. The table has six header rows (passing, rushing, receiving, defense/line, special, and All): they are
+        in fbdraft.html; this file styles them all alike.
+   =========================================================================================== */
+
+/* PURPOSE:  Define the downloaded font so 'Football' can be used below (the path is relative to static/).
+   NOTE:     format('opentype') is a little off for a .ttf; if the font ever fails to show, use 'truetype'. */
 @font-face {
     font-family: 'Football';
     src: url('fonts/Jersey25-Regular.ttf') format('opentype');
 }
 
+/* ----- NAV STRIP: the top bar of page links (same as bbstyle.css) ----- */
 .nav-strip {
     background: #0a0a0a;
     border-bottom: 1px solid #2a2a2a;
@@ -18,6 +39,7 @@
 .nav-strip a:hover { color: #c9a84c; }
 
   /* ── Logo Strip ── */
+  /* ----- LOGO STRIP: the bar holding the row of team logos (same as bbstyle.css) ----- */
   .logo-strip {
     position: relative;      /* ghost logos position against the strip */
     overflow-x: clip;        /* sliding logos can't cause a page scrollbar */
@@ -30,12 +52,14 @@
     justify-content:flex-start;
   }
   .logo-strip + .logo-strip { border-top:1px solid #222; }
+  /* One team's block: one eighth of the strip, matching STRIP_SIZE = 8 in draft_common.js. */
   .logo-wrap {
     flex: 1 1 0;
     min-width: 0;
     max-width: calc(12.5% - 8px);   /* never wider than 1 of 8 slots */
     text-align: center;
   }
+  /* The logo picture with its gold glow (48px tall), strengthening on hover. */
   .logo-wrap img {
     height:48px;
     width:auto;
@@ -44,6 +68,7 @@
     transition:filter .5s;
   }
   .logo-wrap img:hover { filter:drop-shadow(0 0 8px #c9a84c); }
+  /* The team name under the logo (tiny, grey, cut off with "..."). */
   .logo-wrap .team-label {
     font-size:.6rem;
     color:#888;
@@ -53,18 +78,21 @@
     text-overflow:ellipsis;
     transition:color .5s;
   }
+  /* The team ON THE CLOCK: green glow + name if human, red if AI. */
   .logo-wrap.active.human img  { filter:drop-shadow(0 0 10px #39ff14); }
   .logo-wrap.active.human .team-label { color:#39ff14; }
 
   .logo-wrap.active.ai img  { filter:drop-shadow(0 0 10px #ff4444); }
   .logo-wrap.active.ai .team-label { color:#ff4444; }
 
+  /* A blue ring around the logos of teams YOU control. */
   .logo-wrap.human img {
     outline: 3px solid #2196f3;
     outline-offset: 2px;
     border-radius: 4px;
 }
 
+/* The tiny real-team logo in the pool's Team column. */
 .team-logo {
     width: 20px;
     height: 20px;
@@ -72,6 +100,7 @@
     vertical-align: middle;
 }
 
+/* The gold vertical line between rounds in the logo strip. */
 .round-divider {
     flex: 0 0 auto;
     align-self: stretch;
@@ -79,13 +108,17 @@
     margin: 0 4px;
 }
   /* ── Main 3-pane row ── */
+  /* The container for the three panes. 155px = roughly the nav strip + logo strip + ticker; change it if you
+     change their heights. responsive.css stacks it on phones. */
   .draft-body { display:flex; height:calc(100vh - 155px); overflow:hidden; }
 
+  /* The Start / Stop button and the pick clock, side by side in the ticker. */
   .ticker-controls {
     display: flex;
     align-items: center;
     gap: 12px;
 }
+/* The Start / Resume button: green; the class "running" (added by draft_common.js) turns it red ("Stop Draft"). */
 .btn-toggle-draft {
     background: #39ff14;
     border: none;
@@ -101,6 +134,7 @@
 .btn-toggle-draft.running:hover { background: #cc3333; }
 
   /* ── Left pane — all team rosters ── */
+  /* The left column: the Draft Log (200px wide, scrolls by itself). */
   .pane-left {
     width:200px;
     min-width:160px;
@@ -118,6 +152,7 @@
     border-bottom:1px solid #2a2a2a;
     padding-bottom:4px;
   }
+  /* The roster block: .t-name = team name; .t-pick = one slot ("QB: —"); .filled (added by draft_common.js) = gold. */
   .roster-team { margin-bottom:12px; }
   .roster-team .t-name {
     font-size:.72rem;
@@ -132,6 +167,7 @@
   }
   .roster-team .t-pick.filled { color:#c9a84c; }
 
+  /* The dark dropdowns (roster team box #rosterSelect, Real / Strat box #statView). */
   .roster-select {
     width: 100%;
     background: #1a1a1a;
@@ -142,6 +178,7 @@
     font-size: .72rem;
     margin-bottom: 10px;
 }
+/* Make the "Draft Log" heading stick to the top of the pane while the log scrolls under it. */
 .pane-left h6 {
     position: sticky;
     top: -10px;      /* offsets the pane's 10px top padding */
@@ -150,6 +187,7 @@
 }
 
   /* ── Center pane — player pool ── */
+/* The player pool column: takes the leftover width; a vertical flex box (header, scrolling table, pick bar). */
 .pane-center {
     flex: 1;
     overflow: hidden;        /* changed from overflow-y:auto */
@@ -158,6 +196,7 @@
     display: flex;           /* added */
     flex-direction: column;  /* added */
 }
+/* The gold ALL-CAPS title "<DraftName> — Player Pool". */
 .pane-center .draft-title {
     font-size: 1rem;
     font-weight: 700;
@@ -166,16 +205,20 @@
     letter-spacing: .1em;
     margin-bottom: 10px;
 }
+/* The block above the table: title, tabs, search, and the header row. Solid so rows scroll UNDER it. */
 .pane-center-header {
     background: #0d0d0d;
     padding-bottom: 8px;
     z-index: 2;
 }
+/* The scrolling table area (padding-bottom leaves room for the pick bar). */
 .pane-center-scroll {
     flex: 1;
     overflow-y: auto;
     padding-bottom: 50px;
 }
+/* The position tabs (All, QB, HB, FB, TE, WR, OL/DL, Special). The active / hovered tab turns gold
+   (filterPos in draft_fb.js). */
 .pos-filter {
     display: flex;
     gap: 6px;
@@ -199,6 +242,7 @@
     color: #000;
     font-weight: 600;
 }
+/* The selected-player bar stuck to the bottom of the pool: name, stats and the Draft button. */
 .player-select-bar {
     position: sticky;
     bottom: 0;
@@ -222,6 +266,7 @@
     color: #888;
     flex: 2;
 }
+/* The green DRAFT button (hidden until you click a player; draft_common.js shows it). */
 .btn-draft {
     background: #39ff14;
     border: none;
@@ -234,9 +279,15 @@
     display: none;
 }
 .btn-draft:hover { background: #2ecc0f; }
+/* The row you clicked: a dark gold tint and gold outline. (Repeated identically in the table section below.) */
 .player-table tbody tr.selected-row { background: #2a2a1a; outline: 1px solid #c9a84c; }
 
   /* Player table */
+  /* PURPOSE:  The table basics: full width, fixed column widths, no gaps, and the football FONT ('Football' =
+               Jersey 25, with fallbacks).
+     NOTE:     the HEADER and the BODY are two separate tables so the header stays put while the body scrolls;
+               table-layout:fixed keeps their columns lined up.
+     CHANGE:   font-family to change the pool's font; font-size for bigger / smaller table text. */
   .player-table {
     width: 100%;
     table-layout: fixed;
@@ -247,6 +298,8 @@
 }
 
 /* column widths */
+/* PURPOSE:  Column widths by position: 8% / 22% / 14% / 11% / 11% / 11% / 11% / 12% (same as basketball).
+             Columns 4+ are overridden to "auto" by the rule near the bottom of this file. */
 .player-table th:nth-child(1), .player-table td:nth-child(1) { width: 8%; }
 .player-table th:nth-child(2), .player-table td:nth-child(2) { width: 22%; }
 .player-table th:nth-child(3), .player-table td:nth-child(3) { width: 14%; }
@@ -256,6 +309,7 @@
 .player-table th:nth-child(7), .player-table td:nth-child(7) { width: 11%; }
 .player-table th:nth-child(8), .player-table td:nth-child(8) { width: 12%; }
 
+  /* The header row: dark, a gold line under it, sticky at the top. */
   .player-table thead {
     position: sticky;
     top: 0px;
@@ -266,6 +320,7 @@
     border-bottom:2px solid #c9a84c;
     z-index: 1;
   }
+  /* Header cells: gold ALL-CAPS, clickable (sortTable). */
   .player-table th {
     color:#c9a84c;
     font-size:.7rem;
@@ -277,22 +332,27 @@
     cursor: pointer;
   }
 
+  /* The little sort arrow in each header. */
   .sort-icon { font-size: .6rem; color: #666; margin-left: 3px; }
+  /* Body rows: a thin divider, and a lighter background + pointer cursor on hover. */
   .player-table tbody tr {
     border-bottom:1px solid #1e1e1e;
     transition:background .12s;
   }
   .player-table tbody tr:hover { background:#1a1a1a; cursor:pointer; }
   .player-table td { padding:6px 10px; color:#ccc; }
+  /* The position code at the start of each row, bold neon green. */
   .player-table td.pos-badge {
     font-weight:700;
     font-size:.7rem;
     color:#39ff14;
   }
+  /* A DRAFTED player: dimmed and not clickable. The SELECTED row: gold tint and outline. */
   .player-table tbody tr.drafted { opacity:.35; pointer-events:none; }
   .player-table tbody tr.selected-row { background: #2a2a1a; outline: 1px solid #c9a84c; }
 
   /* ── Right pane — current team's roster ── */
+  /* The right column: "On the Clock", the roster dropdown, the salary line and the roster (190px wide). */
   .pane-right {
     width:190px;
     min-width:160px;
@@ -301,6 +361,7 @@
     padding:10px 8px;
     overflow-y:auto;
   }
+  /* The neon-green "ON THE CLOCK" heading and the name of the team picking. */
   .pane-right h6 {
     color:#39ff14;
     font-size:.7rem;
@@ -316,6 +377,8 @@
     color:#e0e0e0;
     margin-bottom:10px;
   }
+  /* (Probably UNUSED) an older roster layout: .slot-row / .slot-label / .slot-player. The current roster uses
+     .t-pick above. Safe to delete if the templates don't contain "slot-row". */
   .slot-row {
     display:flex;
     align-items:center;
@@ -333,12 +396,14 @@
   }
   .slot-player { color:#888; font-style:italic; }
   .slot-player.filled { color:#e0e0e0; font-style:normal; }
+  /* One line of the Draft Log. */
   .log-entry {
     color: #e0e0e0;
     font-size: .72rem;
     padding: 2px 0;
 }
 
+/* THE TICKER BAR: the announcement on the left, Start button + clock on the right. */
 .draft-ticker {
     background: #111;
     border-bottom: 2px solid #c9a84c;
@@ -352,6 +417,7 @@
     color: #e0e0e0;
     font-style: italic;
 }
+/* The pick clock: green, red (class "warning") at 30 seconds or less. */
 .ticker-timer {
     font-size: 1.1rem;
     font-weight: 700;
@@ -361,6 +427,7 @@
     text-align: right;
 }
 .ticker-timer.warning { color: #ff4444; }
+/* "Salary left: $..." (only with a cap): green, red (class "over") if over the cap. */
 .salary-left {
     font-size: .75rem;
     font-weight: 700;
@@ -371,24 +438,37 @@
 }
 .salary-left.over { color: #ff4444; }
 
+/* The row holding the search box, the match counter and the Real / Strat dropdown. */
 .pool-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 .pool-tools .roster-select{margin-bottom:0}
+/* The search box (poolsearch.js); a gold ring when focused. */
 .pool-search{flex:1 1 240px;max-width:360px;background:#1a1a1a;color:#e0e0e0;border:1px solid #333;
   border-radius:4px;padding:5px 10px;font-size:.8rem}
 .pool-search:focus{outline:none;border-color:#c9a84c;box-shadow:0 0 0 2px rgba(201,168,76,.25)}
 .pool-search::placeholder{color:#777}
 .search-count{font-size:.72rem;color:#888;white-space:nowrap}
+/* Rows the search filtered out (!important so it beats the position-tab filter's inline display). */
 .player-table tbody tr.search-hidden{display:none !important}
 
+/* A player's name in the roster panel is a link to his reference page; keep it looking like plain text. */
 .t-pick .pl-link, .t-pick .pl-link:hover, .t-pick .pl-link:visited { color: inherit; text-decoration: none; }
 
 /* stat columns share the leftover width equally, so header and body line up in every view */
+/* PURPOSE:  Columns 4 and up get width:auto, so they share the space left after the first three. WHY: the Real,
+             Strat and All column groups are all in the HTML and the unused ones are hidden; nth-child counts
+             HIDDEN cells too, so fixed per-position percentages would drift out of line between the header
+             table and the body table. */
 .pane-center .player-table th:nth-child(n+4),
 .pane-center .player-table td:nth-child(n+4) {
     width: auto;
 }
 
 /* football All tab: Pos / Name / Team packed to the left */
+/* PURPOSE:  FOOTBALL'S "ALL" TAB has just three columns (Pos / Name / Team). Instead of stretching them across
+             the whole pane, they are packed into a 520px table on the left: Pos 70px, Name 300px, Team 150px.
+             The class "all-compact" is added to .pane-center by draft_common.js applyColumns when the All tab is
+             showing (the sport opts in with compactAll: true in draft_fb.js).
+   CHANGE:   the 520px / 70px / 300px / 150px numbers. (On phones, responsive.css replaces them with percentages.) */
 .pane-center.all-compact .player-table { width: 520px; }
 .pane-center.all-compact .player-table th:nth-child(1),
 .pane-center.all-compact .player-table td:nth-child(1) { width: 70px; }
