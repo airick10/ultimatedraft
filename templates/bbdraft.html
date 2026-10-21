@@ -1,40 +1,122 @@
+{#-
+  ===========================================================================================
+  bbdraft.html  --  THE BASEBALL DRAFT BOARD: the live page where the draft actually happens.
+
+  WHAT IT SHOWS (top to bottom, then left to right)
+    1. NAV STRIP ........ Home, Export Excel, Export Log, Export Report, View Report
+    2. LOGO STRIP ....... the team on the clock and the next picks (filled in by JavaScript)
+    3. TICKER ........... the announcement text, the Start / Stop button and the pick clock
+    4. THREE PANES, side by side:
+         left   the Draft Log
+         center the PLAYER POOL: title, position tabs, search box, Real / Strat dropdown, the table, and
+                the "selected player" bar with the Draft button
+         right  "On the Clock", the roster dropdown, "Salary left", and the chosen team's roster slots
+
+  IT IS MOSTLY A SKELETON. This file lays out the page and writes the player pool and rosters as they were
+  when the page loaded. After that, static/draft_common.js (plus draft_bb.js and poolsearch.js) takes over:
+  it talks to the server over Socket.IO and updates the page live (see those files).
+
+  RENDERED BY
+    routes.py: bb_draft()  (POST /bb_draft: start a new draft, or reopen one by typing its name)
+    routes.py: bb_load()   (POST /bb_load:  the "Open" button on the baseball setup page)
+
+  EXTENDS:  base.html (so it also gets Bootstrap, the fonts, htmx, the Socket.IO client and responsive.css)
+  STYLES:   static/bbstyle.css  (the board's look; see its big comment for the color cheat-sheet)
+  SCRIPTS (loaded in THIS order, which matters): draft_bb.js, draft_common.js, poolsearch.js
+
+  VARIABLES THIS PAGE USES (from the route)
+    draftname          the draft's name                           sport            "bb"
+    current_team       name of the team on the clock              current_team_type  "human" or "ai"
+    current_pick       the next pick number (bb_draft / bb_load pass it; if missing it is worked out below)
+    draft_log          list of pick entries so far {pick, team, pos, player, id, is_bonus?...}
+    all_teams          list of {team_id, name, is_human}, in round-1 order
+    roster_slots       the 25 base slot labels                    team_slots   {team_id: that team's slots,
+                                                                               including a FLEX per two-way twin}
+    roster_assignments {team_id: list the same length as that team's slots; each item is the pick that fills the
+                       slot, or None if it is empty}
+    cap                the salary cap as text ("" = no cap)       players      the draft's player pool
+    label_by_id        {player id: "Cal Ripken (R)"} roster labels          url_by_id   {player id: reference URL}
+    (Passed by the route but NOT used here: logo_rows, pool, draft_file, num_teams, human_teams, ai_set.)
+
+  THE HTML IDS THE JAVASCRIPT DEPENDS ON (do not rename these without changing static/draft_common.js)
+    logoStrip, tickerAnnouncement, tickerTimer, draftToggleBtn, draftLog, playerBody, tableHead, statView,
+    playerSearch, searchCount, selectBar, selectedName, selectedStats, draftBtn, rosterSelect, clockTeam,
+    salaryLeft, one  roster-<Team Name>  block per team, and one  slot-<Team>-<n>  per roster slot.
+    Each pool row carries data-pos, data-kind, data-id, data-sal and data-url.
+  ===========================================================================================
+-#}
 {% extends "base.html" %}
 {% block title %}Baseball Draft{% endblock %}
 {% block css %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('static', filename='bbstyle.css') }}">
+  {# NOTE: this sets a CSS variable named --dirt-bg to the infield-dirt picture, but NO stylesheet reads it (a
+     search for "dirt-bg" in static/ finds nothing), so it currently does nothing. The picture you actually see
+     is the fixed overlay <div> at the top of the body block below. Safe to delete, or use it later with
+     var(--dirt-bg). #}
   <style>
     body { --dirt-bg: url("{{ url_for('static', filename='base_dirt.jpg') }}"); }
   </style>
 {% endblock %}
 
 {% block scripts %}
+{# This block does not call {{ super() }}; that is fine because base.html's scripts block is empty. #}
 <script>
 /* this draft's server values; everything else lives in static/draft_*.js */
+{# THE window.DRAFT OBJECT: how the server hands this draft's data to the JavaScript. Jinja fills in each value
+   when the page is built; the |tojson filter turns it into safe JavaScript (quotes and special characters are
+   escaped, so a team or draft name can't break the page). static/draft_common.js reads these as DRAFT.xxx. #}
 window.DRAFT = {
+    {# the draft's name (used in every message to the server) #}
     draftname:       {{ draftname|tojson }},
+    {# "bb": tells the shared code which sport this is #}
     sport:           {{ sport|tojson }},
+    {# the team on the clock when the page loaded, and whether it is "human" or "ai" (sets the first clock) #}
     currentTeam:     {{ current_team|tojson }},
     currentTeamType: {{ current_team_type|tojson }},
+    {# the next pick number. If the route didn't pass one, use "number of picks so far + 1". Careful: that
+       fallback miscounts when two-way twins are in the log (a twin has its own log entry), which is why bb_draft
+       and bb_load pass current_pick explicitly. #}
     currentPick:     {{ (current_pick if current_pick is defined else draft_log|length + 1)|tojson }},
+    {# true once any pick exists: the Start button then reads "Resume Draft" instead of "Start Draft" #}
     hasPicks:        {{ (draft_log|length > 0)|tojson }},
+    {# every team {team_id, name, is_human}, in round-1 order: the logo strip works out snake order from this #}
     teams:           {{ all_teams|tojson }},
+    {# slots per team (25): the total number of picks is teams x this #}
     rosterSize:      {{ roster_slots|length }},
+    {# the salary cap as text ("" = no cap); the JS turns it into a number #}
     cap:             {{ cap|tojson }},
+    {# the pick log as it was when the page loaded: used to total up each team's spend #}
     initialLog:      {{ draft_log|tojson }},
+    {# {player id: "Name (R)"} roster labels; an empty object if the route didn't pass any #}
     labels:          {{ (label_by_id if label_by_id is defined else {})|tojson }}
 };
 </script>
+{# The three scripts, in the order they must run: the sport file defines window.SPORT and filterPos();
+   draft_common.js (the main code) reads them; poolsearch.js adds the search box. #}
 <script src="{{ url_for('static', filename='draft_bb.js') }}"></script>
 <script src="{{ url_for('static', filename='draft_common.js') }}"></script>
 <script src="{{ url_for('static', filename='poolsearch.js') }}"></script>
 {% endblock %}
 
 {% block body %}
+{# show_salary: True only when the draft HAS a salary cap. The cap text is cleaned (commas and $ removed) and
+   turned into a number (0 if it can't be); anything above 0 means a cap is on. Every Salary column below is
+   wrapped in {% if show_salary %} so the Salary column only appears for capped drafts. (The data-sal attribute is
+   on every row regardless, so "Salary left" and the cap warnings still work.) #}
 {% set show_salary = (cap|string|replace(',', '')|replace('$', '')|float(0)) > 0 %}
 <!-- Background, Bootstrap seems to fight this.  So doing an inline -->
+{# THE BACKGROUND PICTURE. Bootstrap overrides a normal body background on this page, so the picture is drawn as a
+   full-window layer instead: position:fixed + inset:0 = it covers the whole window and stays put; opacity:0.3 = 30%
+   visible (a faint tint over everything); z-index:9999 = on top of the page; pointer-events:none = clicks pass
+   straight through it, so the page underneath still works.
+   CHANGE: opacity for a stronger / fainter picture; the file name (static/base_dirt.jpg) for another picture. #}
 <div style="position:fixed;inset:0;background:url('{{ url_for('static', filename='base_dirt.jpg') }}') center/cover;opacity:0.3;z-index:9999;pointer-events:none;"></div>
 
+{# 1. THE NAV STRIP. The inline margin-left:16px spaces the links apart (responsive.css cancels it on phones).
+      Home -> the baseball setup page.  Export Excel -> bb_export.  Export Log -> log_export (the .txt).
+      Export Report -> bb_report (downloads the HTML report).  View Report -> the same report with ?view=1,
+      opened in a NEW tab instead of downloading. #}
 <div class="nav-strip">
     <a href="{{ url_for('main.start_baseball') }}"> Home</a>
     <a href="{{ url_for('main.bb_export', draftname=draftname) }}" style="margin-left:16px">Export Excel</a>
@@ -45,9 +127,14 @@ window.DRAFT = {
 
 <!-- ── Logo Strip(s) ── -->
 
+{# 2. THE LOGO STRIP: intentionally EMPTY. static/draft_common.js (renderLogoStrip) fills it with the logos of the
+      team on the clock and the next picks, and animates it as picks happen. #}
 <div class="logo-strip" id="logoStrip"></div>
 
 <!-- Draft Ticker -->
+{# 3. THE TICKER. Left: the announcement text (JS rewrites it after each pick). Right: the Start / Resume / Stop
+      button (toggleDraft() in draft_common.js) and the pick clock (JS updates it every second). The button's
+      first label is "Resume Draft" if there are already picks, else "Start Draft". #}
 <div class="draft-ticker">
     <div class="ticker-announcement" id="tickerAnnouncement">Draft starting...</div>
     <div class="ticker-controls">
@@ -57,10 +144,15 @@ window.DRAFT = {
 </div>
 
 <!-- ── 3-pane Draft Body ── -->
+{# 4. THE THREE PANES (a flex row on desktop; responsive.css stacks them on tablets and phones). #}
 <div class="draft-body">
 
+{# ---------------- LEFT PANE: THE DRAFT LOG ---------------- #}
 <div class="pane-left">
     <h6>Draft Log</h6>
+    {# One line per pick so far. A two-way twin (is_bonus) is shown as "↳ Team — POS Name (two-way)", a normal pick as
+       "12. Team — POS Name" (the same text draft_common.js logLine() produces for live picks).
+       The {% else %} below runs when the log is empty and shows "No picks yet" (JS removes it at the first pick). #}
     <div id="draftLog">
         <!-- ***COMMENT*** Add '| reverse' (without quotes) after draft_log if you want reverse order -->
         {% for entry in draft_log %}
@@ -72,10 +164,15 @@ window.DRAFT = {
 </div>
 
   <!-- Center: player pool -->
+{# ---------------- CENTER PANE: THE PLAYER POOL ---------------- #}
 <div class="pane-center">
 
+    {# THE HEADER BLOCK: title, position tabs, search / dropdown row. #}
     <div class="pane-center-header">
         <div class="draft-title">{{ draftname }} — Player Pool</div>
+        {# THE POSITION TABS. onclick="filterPos(this,'SS')" (draft_bb.js) shows only that position's rows and swaps
+           the table header. The tab's code in quotes is also how poolsearch.js finds the right button, so keep
+           the code in the onclick text matching the row's data-pos value. #}
         <div class="pos-filter">
             <button class="btn-pos active" onclick="filterPos(this,'ALL')">All</button>
             <button class="btn-pos" onclick="filterPos(this,'C')">C</button>
@@ -90,6 +187,8 @@ window.DRAFT = {
             <button class="btn-pos" onclick="filterPos(this,'RP')">RP</button>
 
         </div>
+        {# THE POOL TOOLS: the name search box (poolsearch.js; press "/" to jump to it), the "12 found" counter, and
+           the Real / Strat dropdown (switchStatView in draft_common.js; hidden on the All tab). #}
         <div class="pool-tools">
             <input id="playerSearch" class="pool-search" type="search" autocomplete="off"
                    placeholder="Search first or last name   ( / )">
@@ -102,6 +201,16 @@ window.DRAFT = {
 
     </div>
 
+    {# THE TABLE HEADER. It is its OWN <table> (separate from the body) so it can stay put while the rows scroll.
+       THREE header rows live in <thead id="tableHead">; draft_common.js applyColumns() shows ONE at a time:
+         all-head      the "All" tab:  Pos, Name, Team + AVG, HR, W, ERA (+ Salary)
+         hitter-head   the hitter tabs (C ... RF)
+         pitcher-head  the pitcher tabs (SP, RP)
+       Each header row holds the columns of ALL THREE groups and the JS hides the groups not in use:
+         class "stat-real"   the Real Stats columns      class "stat-strat"  the Strat Stats columns
+         class "stat-all"    the All-tab columns
+       Clicking a header cell calls sortTable(this) (draft_common.js). The "Salary" cells only exist when a cap is on.
+       The three-column start (Pos / Name / Team) is the same in every row. #}
     <table class="player-table">
   <thead id="tableHead">
     <tr id="all-head">
@@ -114,6 +223,8 @@ window.DRAFT = {
       <th class="stat-all" onclick="sortTable(this)">ERA <span class="sort-icon">↕</span></th>
       {% if show_salary %}<th class="stat-all" onclick="sortTable(this)">Salary <span class="sort-icon">↕</span></th>{% endif %}
     </tr>
+    {# hitter-head: starts hidden (display:none); real columns: Bats, AVG, HR, RBI, SB; strat columns: Bats, Balance,
+       OBTBvL, OBTBvR, Fielding, Stealing. #}
     <tr id="hitter-head" style="display:none">
       <th onclick="sortTable(this)">Pos <span class="sort-icon">↕</span></th>
       <th onclick="sortTable(this)">Name <span class="sort-icon">↕</span></th>
@@ -132,6 +243,8 @@ window.DRAFT = {
       <th class="stat-strat" onclick="sortTable(this)">Stealing <span class="sort-icon">↕</span></th>
       {% if show_salary %}<th class="stat-strat" onclick="sortTable(this)">Salary <span class="sort-icon">↕</span></th>{% endif %}
     </tr>
+    {# pitcher-head: starts hidden; real columns: Throws, ERA, W, WHIP, SV; strat columns: Throws, Balance, OBTBvL,
+       OBTBvR, Endurance, Hold. #}
     <tr id="pitcher-head" style="display:none">
       <th onclick="sortTable(this)">Pos <span class="sort-icon">↕</span></th>
       <th onclick="sortTable(this)">Name <span class="sort-icon">↕</span></th>
@@ -152,14 +265,25 @@ window.DRAFT = {
     </tr>
   </thead>
 </table>
+    {# THE TABLE BODY: a second <table> inside the scrolling area, one <tr> per player. #}
     <div class="pane-center-scroll">
       <table class="player-table">
           <tbody id="playerBody">
   {% for p in players %}
+  {# Every row carries data attributes the JavaScript reads:
+       data-pos   the position tab it belongs to ("SS", "SP"...)      data-kind  "hitter" or "pitcher"
+       data-id    the player's id (e.g. "h_123"): what is sent to the server when you draft him
+       data-sal   his salary text: used for "Salary left" and the cap math
+       data-url   his Baseball-Reference page: the roster panel links his name to it
+     The first three cells (position, name, team logo) are always shown; then the three column groups (real / strat /
+     all) follow, and applyColumns() hides the ones not in use. An unavailable stat shows "—". #}
   {% if p.kind == "hitter" %}
     <tr data-pos="{{ p.short_pos }}" data-kind="hitter" data-id="{{ p.id }}" data-sal="{{ p.s_sal }}" data-url="{{ p.BaseballReferenceURL }}">
       <td class="pos-badge">{{ p.short_pos }}</td>
       <td>{{ p.FirstName }} {{ p.LastName }}</td>
+      {# The team cell: the player's real-team logo (Logos/baseballdraft/<Team>.png). If the picture fails to load,
+         onerror hides it and shows the team code instead (it un-hides the next <span>, which starts with
+         Bootstrap's "visually-hidden" class). #}
       <td class="team-cell">
         {% if p.Team %}
         <img class="team-logo"
@@ -185,6 +309,7 @@ window.DRAFT = {
       <td class="stat-strat">{{ p.s_stealing if p.s_stealing is defined else '—' }}</td>
       {% if show_salary %}<td class="stat-strat">{{ p.s_sal if p.s_sal is defined else '—' }}</td>{% endif %}
       <!-- All tab -->
+      {# The All tab shows a hitter's AVG and HR, and "—" under W and ERA (those are pitcher stats). #}
       <td class="stat-all">{{ p.b_batting_avg if p.b_batting_avg is defined else '—' }}</td>
       <td class="stat-all">{{ p.b_hr if p.b_hr is defined else '—' }}</td>
       <td class="stat-all">—</td>
@@ -192,6 +317,7 @@ window.DRAFT = {
       {% if show_salary %}<td class="stat-all">{{ p.s_sal if p.s_sal is defined else '—' }}</td>{% endif %}
     </tr>
   {% else %}
+    {# A PITCHER row (anything that isn't a hitter): the same layout, with pitching stats. #}
     <tr data-pos="{{ p.short_pos }}" data-kind="pitcher" data-id="{{ p.id }}" data-sal="{{ p.s_sal }}" data-url="{{ p.BaseballReferenceURL }}">
       <td class="pos-badge">{{ p.short_pos }}</td>
       <td>{{ p.FirstName }} {{ p.LastName }}</td>
@@ -220,6 +346,7 @@ window.DRAFT = {
       <td class="stat-strat">{{ p.s_ho if p.s_ho is defined else '—' }}</td>
       {% if show_salary %}<td class="stat-strat">{{ p.s_sal if p.s_sal is defined else '—' }}</td>{% endif %}
       <!-- All tab -->
+      {# The All tab shows a pitcher's W and ERA, and "—" under AVG and HR. #}
       <td class="stat-all">—</td>
       <td class="stat-all">—</td>
       <td class="stat-all">{{ p.p_w if p.p_w is defined else '—' }}</td>
@@ -232,6 +359,8 @@ window.DRAFT = {
     </table>
   </div>
 
+        {# THE SELECTED-PLAYER BAR at the bottom of the pool. Clicking a row fills the name and stats; the Draft button
+           (hidden until you select someone) calls draftPlayer() in draft_common.js. #}
         <div class="player-select-bar" id="selectBar">
         <div class="selected-name" id="selectedName">Click a player to select</div>
         <div class="selected-stats" id="selectedStats"></div>
@@ -243,10 +372,14 @@ window.DRAFT = {
 
 
   <!-- Right: on-the-clock team roster -->
+{# ---------------- RIGHT PANE: ON THE CLOCK AND THE ROSTER ---------------- #}
   <div class="pane-right">
     <h6>On the Clock</h6>
+    {# The name of the team picking (JS updates it after each pick). #}
     <div class="on-clock" id="clockTeam">{{ current_team }}</div>
 
+    {# THE ROSTER DROPDOWN: choose any team to look at its roster. The team on the clock starts selected.
+       onchange calls showRoster(name) in draft_common.js, which shows that team's block below. #}
     <select id="rosterSelect" onchange="showRoster(this.value)" class="roster-select">
     {% for team in all_teams %}
     <option value="{{ team.name }}" {{ 'selected' if team.name == current_team else '' }}>
@@ -254,8 +387,15 @@ window.DRAFT = {
     </option>
     {% endfor %}
 </select>
+    {# "Salary left: $..." (shown by updateSalaryLine in draft_common.js only when the draft has a cap). #}
     <div class="salary-left" id="salaryLeft" style="display:none"></div>
 
+    {# ONE ROSTER BLOCK PER TEAM, all hidden (display:none) until chosen. For each team:
+         team_slots[team.team_id]       that team's slot labels (the 25, plus a FLEX per two-way twin)
+         roster_assignments[team_id]    the pick that fills each slot, in the same order (None = empty)
+       A FILLED slot shows "POS: Player Name (R)" (the hand label comes from label_by_id) and, when the player has a
+       reference-page link (url_by_id), the name is a link that opens in a new window. An EMPTY slot shows "SLOT: —".
+       The data-slot attribute is how static/draft_common.js finds the right empty slot when a new pick arrives. #}
     {% for team in all_teams %}
 <div class="roster-team" id="roster-{{ team.name }}" style="display:none">
     <div class="t-name">{{ team.name }}</div>
@@ -278,6 +418,3 @@ window.DRAFT = {
 </div>
 
 {% endblock %}
-
-
-

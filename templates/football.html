@@ -1,9 +1,28 @@
+{#-
+  ===========================================================================================
+  football.html  --  the FOOTBALL SETUP PAGE.
+
+  The same wrapper as baseball.html (read the notes at the top of that file); only the values below differ.
+
+  RENDERED BY:   routes.py: start_football()  (the "/football" address).
+  EXTENDS:       base.html          INCLUDES: partials/setup_ui.html          SCRIPT: static/setup.js
+  VARIABLES PASSED IN BY THE ROUTE: saved_drafts, cap_default, cap_options (the same as baseball).
+
+  DIFFERENCES FROM baseball.html
+    - tab title "Football Draft"
+    - background picture static/foot_back.jpg
+    - cfg points at the football routes (fb_load, fb_delete, fb_confirm, show_fb_logos)
+    - cfg 'sport' is 'Football', so the theme class is "theme-football" (green; see themes.css)
+    - cap_presets is an empty list (it is unused anyway)
+  ===========================================================================================
+-#}
 {% extends "base.html" %}
 {% block title %}Football Draft{% endblock %}
 {% block css %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('static', filename='confirm.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='setup.css') }}">
+  {# PAGE BACKGROUND: the football picture (static/foot_back.jpg), covering the window, fixed in place. #}
   <style>
     body { background: #0b1220 url("{{ url_for('static', filename='foot_back.jpg') }}") center center / cover no-repeat fixed; }
   </style>
@@ -14,6 +33,7 @@
 {% endblock %}
 
 {% block body %}
+  {# cfg for football (see baseball.html for what each key means). #}
   {% set cfg = {
     'sport': 'Football',
     'home': url_for('main.index'),

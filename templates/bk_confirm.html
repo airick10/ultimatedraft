@@ -1,8 +1,28 @@
+{#-
+  ===========================================================================================
+  bk_confirm.html  --  the BASKETBALL CONFIRM PAGE.
+
+  The same wrapper as bb_confirm.html (read the notes at the top of that file, including the list of variables
+  the route passes in); only the values below differ.
+
+  RENDERED BY:   routes.py: bk_confirm()  (a POST to "/bk_confirm").
+  EXTENDS:       base.html          INCLUDES: partials/confirm_ui.html          SCRIPT: static/confirm.js
+
+  DIFFERENCES FROM bb_confirm.html
+    - tab title "Basketball Draft"; background picture static/bk_back.jpg; theme "theme-basketball"
+    - pos_field is "Pos" (basketball players keep their position in "Pos"; defense units are given the
+      position "DEF" by services.py: _defense_units)
+    - four groups: Centers (3 per team), Forwards (5), Guards (5) and Defense (2).
+      The Defense group's code is "D" but it MATCHES the position value "DEF".
+      The multipliers match the Random pool in services.py: load_basketball.
+  ===========================================================================================
+-#}
 {% extends "base.html" %}
 {% block title %}Basketball Draft{% endblock %}
 {% block css %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('static', filename='confirm.css') }}">
+  {# PAGE BACKGROUND: the basketball picture (static/bk_back.jpg), covering the window, fixed in place. #}
   <style>
     body { background: #0b1220 url("{{ url_for('static', filename='bk_back.jpg') }}") center center / cover no-repeat fixed; }
   </style>
@@ -13,6 +33,7 @@
 
 
 {% block body %}
+  {# cfg for basketball (see bb_confirm.html for what each key means). #}
   {% set cfg = {
     'sport': 'Basketball',
     'home': url_for('main.start_basketball'),
@@ -29,6 +50,3 @@
   } %}
   {% include "partials/confirm_ui.html" %}
 {% endblock %}
-
-
-

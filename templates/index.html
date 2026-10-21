@@ -1,9 +1,29 @@
+{#-
+  ===========================================================================================
+  index.html  --  the LANDING PAGE: three big pictures (Baseball, Basketball, Football). Click one to go to
+  that sport's setup page.
+
+  RENDERED BY:   routes.py: index()  (the "/" address). It passes no variables.
+  EXTENDS:       base.html
+  LINKS TO:      start_baseball ("/baseball"), start_basketball ("/basketball"), start_football ("/football"),
+                 all built with url_for('main.<function name>').
+  STYLED BY:     confirm.css (the "cf-" page wrapper, title, subtitle) and setup.css (the "su-" picture cards).
+                 This page has no sport theme class, so it uses the default gold colors in confirm.css.
+  PICTURES:      static/baseball.jpg, static/basketball.jpg, static/football.jpg.
+  ===========================================================================================
+-#}
 {% extends "base.html" %}
 {% block title %}Sports Draft{% endblock %}
 {% block css %}
+  {# Keep base.html's styles.css, then add the two stylesheets this page uses. #}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('static', filename='confirm.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='setup.css') }}">
+  {# PAGE BACKGROUND: a dark blue radial glow (lighter at the top center, darker toward the edges), fixed in place
+     while scrolling. "body::before { display: none; }" turns off any dark overlay layer on <body>; none is defined
+     in the current stylesheets, so it looks like a leftover safety line. (The page's real dimming layer is
+     .cf-wrap::before in confirm.css, which this line does not affect.)
+     CHANGE: the colors #1e293b / #0b1220 for a different glow. #}
   <style>
     body { background: radial-gradient(circle at 50% 0%, #1e293b 0%, #0b1220 70%) fixed; }
     body::before { display: none; }
@@ -11,10 +31,15 @@
 {% endblock %}
 
 {% block body %}
+{# The page wrapper (centered, max 1180px wide). #}
 <div class="cf-wrap">
+  {# The title and subtitle. The inline style centers them and makes the title bigger; responsive.css shrinks the
+     title on phones with !important because inline styles would otherwise win. #}
   <h1 class="cf-title" style="text-align:center;font-size:2.4rem;margin-top:18px">Sports Draft</h1>
   <p class="cf-sub" style="text-align:center">Pick a sport to start a new draft or resume one.</p>
 
+  {# The three picture cards. Each is a link: the picture fills the card and the label sits over a dark fade at
+     the bottom. alt="" because the label text beside it already says what it is. #}
   <div class="su-sports">
     <a class="su-sport" href="{{ url_for('main.start_baseball') }}">
       <img src="{{ url_for('static', filename='baseball.jpg') }}" alt=""><span>Baseball</span>

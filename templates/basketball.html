@@ -1,9 +1,28 @@
+{#-
+  ===========================================================================================
+  basketball.html  --  the BASKETBALL SETUP PAGE.
+
+  The same wrapper as baseball.html (read the notes at the top of that file); only the values below differ.
+
+  RENDERED BY:   routes.py: start_basketball()  (the "/basketball" address).
+  EXTENDS:       base.html          INCLUDES: partials/setup_ui.html          SCRIPT: static/setup.js
+  VARIABLES PASSED IN BY THE ROUTE: saved_drafts, cap_default, cap_options (the same as baseball).
+
+  DIFFERENCES FROM baseball.html
+    - tab title "Basketball Draft"
+    - background picture static/bk_back.jpg
+    - cfg points at the basketball routes (bk_load, bk_delete, bk_confirm, show_bk_logos)
+    - cfg 'sport' is 'Basketball', so the theme class is "theme-basketball" (orange; see themes.css)
+    - cap_presets is an empty list (it is unused anyway)
+  ===========================================================================================
+-#}
 {% extends "base.html" %}
 {% block title %}Basketball Draft{% endblock %}
 {% block css %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('static', filename='confirm.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='setup.css') }}">
+  {# PAGE BACKGROUND: the basketball picture (static/bk_back.jpg), covering the window, fixed in place. #}
   <style>
     body { background: #0b1220 url("{{ url_for('static', filename='bk_back.jpg') }}") center center / cover no-repeat fixed; }
   </style>
@@ -14,6 +33,7 @@
 {% endblock %}
 
 {% block body %}
+  {# cfg for basketball (see baseball.html for what each key means). #}
   {% set cfg = {
     'sport': 'Basketball',
     'home': url_for('main.index'),

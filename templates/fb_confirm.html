@@ -1,8 +1,26 @@
+{#-
+  ===========================================================================================
+  fb_confirm.html  --  the FOOTBALL CONFIRM PAGE.
+
+  The same wrapper as bb_confirm.html (read the notes at the top of that file, including the list of variables
+  the route passes in); only the values below differ.
+
+  RENDERED BY:   routes.py: fb_confirm()  (a POST to "/fb_confirm").
+  EXTENDS:       base.html          INCLUDES: partials/confirm_ui.html          SCRIPT: static/confirm.js
+
+  DIFFERENCES FROM bb_confirm.html
+    - tab title "Football Draft"; background picture static/foot_back.jpg; theme "theme-football"
+    - pos_field is "short_pos"
+    - seven groups: QB (3 per team), HB (3), FB (2), TE (3), WR (5), DO = defense / offensive-line units (2)
+      and KP = special-teams units (2). The multipliers match the Random pool in services.py: load_football.
+  ===========================================================================================
+-#}
 {% extends "base.html" %}
 {% block title %}Football Draft{% endblock %}
 {% block css %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('static', filename='confirm.css') }}">
+  {# PAGE BACKGROUND: the football picture (static/foot_back.jpg), covering the window, fixed in place. #}
   <style>
     body { background: #0b1220 url("{{ url_for('static', filename='foot_back.jpg') }}") center center / cover no-repeat fixed; }
   </style>
@@ -12,6 +30,7 @@
 {% endblock %}
 
 {% block body %}
+  {# cfg for football (see bb_confirm.html for what each key means). #}
   {% set cfg = {
     'sport': 'Football',
     'home': url_for('main.start_football'),

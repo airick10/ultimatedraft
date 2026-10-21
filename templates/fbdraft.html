@@ -1,8 +1,43 @@
+{#-
+  ===========================================================================================
+  fbdraft.html  --  THE FOOTBALL DRAFT BOARD.
+
+  The same page as bbdraft.html. READ THE NOTES AT THE TOP OF bbdraft.html FIRST (what the page shows, the
+  variables, the HTML ids the JavaScript depends on, the window.DRAFT object, the background overlay). The
+  comments below only describe each block briefly and say where football DIFFERS.
+
+  RENDERED BY
+    routes.py: fb_draft()  (POST /fb_draft)     routes.py: fb_load()  (POST /fb_load)
+  EXTENDS:  base.html        STYLES: static/fbstyle.css
+  SCRIPTS (in order): draft_fb.js, draft_common.js, poolsearch.js
+
+  DIFFERENCES FROM bbdraft.html
+    - background picture static/football_field.jpg
+    - the position tabs are All / QB / HB / FB / TE / WR / OL/DL (code DO) / Special (code KP)
+    - SIX HEADER ROWS in <thead id="tableHead"> (one is shown at a time; draft_fb.js HEAD_FOR_POS_FB decides which):
+        all-head        All tab: ONLY three columns (Pos, Name, Team); no stat columns at all
+        passing-head    QB            rushing-head   HB and FB          receiving-head   TE and WR
+        oldl-head       OL/DL (a whole defense / offensive-line unit)    special-head    Special (a kicking unit)
+      Every row except the All tab has Real columns, Strat columns, and (with a cap) a Salary in each group.
+    - FIVE KINDS OF ROW (data-kind): passer, rusher, receiver, dlineoline, special. The first three are PEOPLE
+      (name = FirstName LastName, team logo from the "TM" field); the last two are UNITS (name from the "name"
+      field, logo from "Team_Logo"). All logos come from Logos/football/<code>.png.
+    - NO "All" stat columns in the rows: the All tab shows just Pos / Name / Team (the "all-compact" CSS class packs
+      them to the left; see fbstyle.css).
+    - roster blocks use the per-team team_slots (they include a FLEX slot for each two-way twin), and the draft log
+      shows twins as "↳ ... (two-way)". Roster names come straight from the pick (no label_by_id).
+
+  VARIABLES (from the route): draftname, sport ("fb"), current_team, current_team_type, current_pick, draft_log,
+    all_teams, roster_slots, team_slots, roster_assignments, cap, players, url_by_id.
+  (Passed but not used here: logo_rows, pool, draft_file, num_teams, human_teams, ai_set.)
+  ===========================================================================================
+-#}
 {% extends "base.html" %}
 {% block title %}Football Draft{% endblock %}
 {% block css %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('static', filename='fbstyle.css') }}">
+  {# --dirt-bg is defined but no stylesheet uses it (see bbdraft.html). #}
   <style>
     body { --dirt-bg: url("{{ url_for('static', filename='football_field.jpg') }}"); }
   </style>
@@ -12,6 +47,7 @@
 {% block scripts %}
 <script>
 /* this draft's server values; everything else lives in static/draft_*.js */
+{# The window.DRAFT object: see bbdraft.html for what each value is. Football's labels is always empty. #}
 window.DRAFT = {
     draftname:       {{ draftname|tojson }},
     sport:           {{ sport|tojson }},
@@ -32,11 +68,14 @@ window.DRAFT = {
 {% endblock %}
 
 {% block body %}
+{# True only when the draft has a salary cap (see bbdraft.html); controls every Salary column. #}
 {% set show_salary = (cap|string|replace(',', '')|replace('$', '')|float(0)) > 0 %}
 <!-- Background, Bootstrap seems to fight this.  So doing an inline -->
 
+{# The background picture layer (static/football_field.jpg): fixed, 30% opacity, clicks pass through. #}
 <div style="position:fixed;inset:0;background:url('{{ url_for('static', filename='football_field.jpg') }}') center/cover;opacity:0.3;z-index:9999;pointer-events:none;"></div>
 
+{# NAV STRIP: Home / Export Excel / Export Log / Export Report / View Report (new tab). #}
 <div class="nav-strip">
     <a href="{{ url_for('main.start_football') }}"> Home</a>
     <a href="{{ url_for('main.fb_export', draftname=draftname) }}" style="margin-left:16px">Export Excel</a>
@@ -47,9 +86,11 @@ window.DRAFT = {
 
 <!-- ── Logo Strip(s) ── -->
 
+{# THE LOGO STRIP: empty; draft_common.js fills and animates it. #}
 <div class="logo-strip" id="logoStrip"></div>
 
 <!-- Draft Ticker -->
+{# THE TICKER: announcement, Start / Resume / Stop button, pick clock (see bbdraft.html). #}
 <div class="draft-ticker">
     <div class="ticker-announcement" id="tickerAnnouncement">Draft starting...</div>
     <div class="ticker-controls">
@@ -59,8 +100,10 @@ window.DRAFT = {
 </div>
 
 <!-- ── 3-pane Draft Body ── -->
+{# THE THREE PANES (stacked on tablets and phones by responsive.css). #}
 <div class="draft-body">
 
+{# LEFT PANE: the Draft Log. Normal picks read "12. Team — POS Name"; a two-way twin reads "↳ Team — POS Name (two-way)". #}
 <div class="pane-left">
     <h6>Draft Log</h6>
     <div id="draftLog">
@@ -74,10 +117,12 @@ window.DRAFT = {
 </div>
 
   <!-- Center: player pool -->
+{# CENTER PANE: THE PLAYER POOL. #}
 <div class="pane-center">
 
     <div class="pane-center-header">
         <div class="draft-title">{{ draftname }} — Player Pool</div>
+        {# The position tabs. The code in each onclick is the row's data-pos value (DO = OL/DL units, KP = special teams). #}
         <div class="pos-filter">
             <button class="btn-pos active" onclick="filterPos(this,'ALL')">All</button>
             <button class="btn-pos" onclick="filterPos(this,'QB')">QB</button>
@@ -88,6 +133,7 @@ window.DRAFT = {
             <button class="btn-pos" onclick="filterPos(this,'DO')">OL/DL</button>
             <button class="btn-pos" onclick="filterPos(this,'KP')">Special</button>
         </div>
+        {# Search box, match counter, and the Real / Strat dropdown (hidden on the All tab). #}
         <div class="pool-tools">
             <input id="playerSearch" class="pool-search" type="search" autocomplete="off"
                    placeholder="Search first or last name   ( / )">
@@ -99,13 +145,18 @@ window.DRAFT = {
         </div>
     </div>
 
+    {# THE TABLE HEADER (its own <table>). SIX header rows; draft_common.js applyColumns() shows the one that
+       draft_fb.js maps to the current tab. Clicking a header cell calls sortTable(this). Within a row, cells with
+       class "stat-real" show on the Real view and "stat-strat" on the Strat view. #}
     <table class="player-table">
     <thead id="tableHead">
+      {# all-head: the All tab; just Pos, Name, Team (there are no stat columns, hence the narrow "all-compact" layout). #}
       <tr id="all-head">
           <th onclick="sortTable(this)">Pos <span class="sort-icon">↕</span></th>
           <th onclick="sortTable(this)">Name <span class="sort-icon">↕</span></th>
           <th onclick="sortTable(this)">Team <span class="sort-icon">↕</span></th>
       </tr>
+      {# passing-head (QB tab): real = Pass Yds, Comp%, QB Rat, PassTDs, Int%; strat = Y/A, Cmp%, QB Rat, Int%, Must Run. #}
       <tr id="passing-head" style="display:none">
           <th onclick="sortTable(this)">Pos <span class="sort-icon">↕</span></th>
           <th onclick="sortTable(this)">Name <span class="sort-icon">↕</span></th>
@@ -123,6 +174,8 @@ window.DRAFT = {
           <th class="stat-strat" onclick="sortTable(this)">Must Run <span class="sort-icon">↕</span></th>
           {% if show_salary %}<th class="stat-strat" onclick="sortTable(this)">Salary <span class="sort-icon">↕</span></th>{% endif %}
       </tr>
+      {# rushing-head (HB and FB tabs): real = Rush Yds, Rush TD, Avg, Receptions, RecYards; strat = Y/Rush, LB-R, ER-R,
+         Fum%, ShortPassRight (the cell under that last header reads the s_SPR-C value). #}
       <tr id="rushing-head" style="display:none">
           <th onclick="sortTable(this)">Pos <span class="sort-icon">↕</span></th>
           <th onclick="sortTable(this)">Name <span class="sort-icon">↕</span></th>
@@ -140,6 +193,8 @@ window.DRAFT = {
           <th class="stat-strat" onclick="sortTable(this)">ShortPassRight <span class="sort-icon">↕</span></th>
           {% if show_salary %}<th class="stat-strat" onclick="sortTable(this)">Salary <span class="sort-icon">↕</span></th>{% endif %}
       </tr>
+      {# receiving-head (TE and WR tabs): real = Rec Yds, Rec TD, Rec%, Receptions, YrdsperRec; strat = Y/Rec, FPR-Y,
+         SPR-Y, SPR-C, LPR-Y. #}
       <tr id="receiving-head" style="display:none">
           <th onclick="sortTable(this)">Pos <span class="sort-icon">↕</span></th>
           <th onclick="sortTable(this)">Name <span class="sort-icon">↕</span></th>
@@ -157,6 +212,8 @@ window.DRAFT = {
           <th class="stat-strat" onclick="sortTable(this)">LPR-Y <span class="sort-icon">↕</span></th>
           {% if show_salary %}<th class="stat-strat" onclick="sortTable(this)">Salary <span class="sort-icon">↕</span></th>{% endif %}
       </tr>
+      {# oldl-head (OL/DL tab): a defense / offensive-line UNIT, so the second header is "Team/Yr" (e.g. "1985 Chicago DO");
+         real = Yds/Play, Fum%, Int%, Run Rating, Pass Rating; strat = OL Run, OL Pass, QB/WR Fum, D Run, D Pass. #}
       <tr id="oldl-head" style="display:none">
           <th onclick="sortTable(this)">Pos <span class="sort-icon">↕</span></th>
           <th onclick="sortTable(this)">Team/Yr <span class="sort-icon">↕</span></th>
@@ -174,6 +231,8 @@ window.DRAFT = {
           <th class="stat-strat" onclick="sortTable(this)">D Pass <span class="sort-icon">↕</span></th>
           {% if show_salary %}<th class="stat-strat" onclick="sortTable(this)">Salary <span class="sort-icon">↕</span></th>{% endif %}
       </tr>
+      {# special-head (Special tab): a special-teams UNIT; real = KO Avg, PR Avg, Kick Cov, KO TD, PR TD;
+         strat = XP, FG <33, Punt Avg, Touchbacks, KickCoverage. ("&lt;" is how a "<" is written in HTML.) #}
       <tr id="special-head" style="display:none">
           <th onclick="sortTable(this)">Pos <span class="sort-icon">↕</span></th>
           <th onclick="sortTable(this)">Team/Yr <span class="sort-icon">↕</span></th>
@@ -193,11 +252,16 @@ window.DRAFT = {
       </tr>
     </thead>
 </table>
+{# THE TABLE BODY: one <tr> per record. The KIND of the record (p.kind, set by services.py load_football) picks which of
+   the five row layouts below is used; the last {% else %} is the special-teams row. Every row has data-pos,
+   data-kind, data-id, data-sal and data-url (the Football-Reference page). #}
 <div class="pane-center-scroll">
   <table class="player-table">
       <tbody id="playerBody">
   {% for p in players %}
   {% if p.kind == "passer" %}
+    {# PASSER (QB): the logo comes from the player's "TM" field (Logos/football/<TM>.png), with a text fallback if the
+       picture fails to load. NOTE: in this row's Real group, the "QB Rat" cell reads the Strat key s_QBRat. #}
     <tr data-pos="{{ p.short_pos }}" data-kind="passer" data-id="{{ p.id }}" data-sal="{{ p.Salary }}" data-url="{{ p.FootballReferenceURL }}">
         <td class="pos-badge">{{ p.short_pos }}</td>
         <td>{{ p.FirstName }} {{ p.LastName }}</td>
@@ -224,6 +288,7 @@ window.DRAFT = {
         {% if show_salary %}<td class="stat-strat">{{ p.Salary if p.Salary is defined else '—' }}</td>{% endif %}
     </tr>
   {% elif p.kind == "rusher" %}
+    {# RUSHER (HB or FB): same layout, rushing stats. #}
     <tr data-pos="{{ p.short_pos }}" data-kind="rusher" data-id="{{ p.id }}" data-sal="{{ p.Salary }}" data-url="{{ p.FootballReferenceURL }}">
         <td class="pos-badge">{{ p.short_pos }}</td>
         <td>{{ p.FirstName }} {{ p.LastName }}</td>
@@ -250,6 +315,8 @@ window.DRAFT = {
         {% if show_salary %}<td class="stat-strat">{{ p.Salary if p.Salary is defined else '—' }}</td>{% endif %}
     </tr>
   {% elif p.kind == "receiver" %}
+    {# RECEIVER (TE or WR): same layout, receiving stats. NOTE: this row's Real group reads two Strat keys (s_Rec%
+       and s_YpRec) under the "Rec%" and "YrdsperRec" headers. #}
     <tr data-pos="{{ p.short_pos }}" data-kind="receiver" data-id="{{ p.id }}" data-sal="{{ p.Salary }}" data-url="{{ p.FootballReferenceURL }}">
         <td class="pos-badge">{{ p.short_pos }}</td>
         <td>{{ p.FirstName }} {{ p.LastName }}</td>
@@ -276,6 +343,8 @@ window.DRAFT = {
         {% if show_salary %}<td class="stat-strat">{{ p.Salary if p.Salary is defined else '—' }}</td>{% endif %}
     </tr>
   {% elif p.kind == "dlineoline" %}
+    {# DEFENSE / OFFENSIVE-LINE UNIT: the name comes from p.name (like "1985 Chicago DO") and the logo from the
+       "Team_Logo" field. Both the Real and Strat groups read Strat keys (s_...). #}
     <tr data-pos="{{ p.short_pos }}" data-kind="dlineoline" data-id="{{ p.id }}" data-sal="{{ p.Salary }}" data-url="{{ p.FootballReferenceURL }}">
         <td class="pos-badge">{{ p.short_pos }}</td>
         <td>{{ p.name }}</td>
@@ -302,6 +371,8 @@ window.DRAFT = {
         {% if show_salary %}<td class="stat-strat">{{ p.Salary if p.Salary is defined else '—' }}</td>{% endif %}
     </tr>
   {% else %}
+    {# SPECIAL-TEAMS UNIT (the {% else %} catches the last kind, "special"): name from p.name, logo from "Team_Logo";
+       both groups read Strat keys. #}
     <tr data-pos="{{ p.short_pos }}" data-kind="special" data-id="{{ p.id }}" data-sal="{{ p.Salary }}" data-url="{{ p.FootballReferenceURL }}">
         <td class="pos-badge">{{ p.short_pos }}</td>
         <td>{{ p.name }}</td>
@@ -333,6 +404,7 @@ window.DRAFT = {
 </table>
   </div>
 
+        {# THE SELECTED-PLAYER BAR (name, stats, Draft button). #}
         <div class="player-select-bar" id="selectBar">
         <div class="selected-name" id="selectedName">Click a player to select</div>
         <div class="selected-stats" id="selectedStats"></div>
@@ -344,6 +416,7 @@ window.DRAFT = {
 
 
   <!-- Right: on-the-clock team roster -->
+  {# RIGHT PANE: on the clock, the roster dropdown, "Salary left", and a roster block per team. #}
   <div class="pane-right">
     <h6>On the Clock</h6>
     <div class="on-clock" id="clockTeam">{{ current_team }}</div>
@@ -357,6 +430,8 @@ window.DRAFT = {
 </select>
     <div class="salary-left" id="salaryLeft" style="display:none"></div>
 
+    {# ONE ROSTER BLOCK PER TEAM, using that team's own slot list (team_slots) so FLEX slots from two-way twins appear. A
+       filled slot shows "POS: Name" (a link when the player has a Football-Reference URL); an empty one "SLOT: —". #}
     {% for team in all_teams %}
 <div class="roster-team" id="roster-{{ team.name }}" style="display:none">
     <div class="t-name">{{ team.name }}</div>
@@ -380,6 +455,3 @@ window.DRAFT = {
 </div>
 
 {% endblock %}
-
-
-

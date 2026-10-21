@@ -1,18 +1,65 @@
+{#-
+  ===========================================================================================
+  bb_confirm.html  --  the BASEBALL CONFIRM PAGE (step 2 of starting a draft).
+
+  Depending on the pool you chose, this page shows one of two things:
+    - the FINAL CONFIRM: "Name your draft", the teams, and a summary of the pool; or
+    - the CUSTOM POOL PICKER: boxes of checkboxes so you can choose exactly which players are in the pool.
+
+  THIS FILE IS A THIN WRAPPER. The real page lives in templates/partials/confirm_ui.html, shared by all three
+  sports. This file loads the stylesheet, background picture and script, and hands the partial a "cfg" dictionary
+  describing baseball. bk_confirm.html and fb_confirm.html are the same file with different values.
+
+  RENDERED BY:   routes.py: bb_confirm()  (a POST to "/bb_confirm", from the setup form or from the custom pool
+                 picker's own form).
+  EXTENDS:       base.html          INCLUDES: partials/confirm_ui.html
+  SCRIPT:        static/confirm.js (the name box, the pool search, and the custom picker's counters and buttons)
+  STYLES:        confirm.css (which imports themes.css). This page does NOT load setup.css.
+
+  VARIABLES PASSED IN BY THE ROUTE (used by the partial, not here)
+    mode          "final_confirm" or "select_players"
+    num_teams     the number of teams
+    human_teams   names of the teams you control          ai_set   names of the AI teams
+    pool          "full", "random" or "custom"            cap      the cleaned cap amount as text, or ""
+    draftname     the draft's name so far (may be blank)  players  the list of players in the pool
+    saved_names   names of existing baseball drafts (used to warn about a duplicate name)
+    berserker     True / False, supplied automatically to every template by routes.py: inject_berserker
+  ===========================================================================================
+-#}
 {% extends "base.html" %}
 {% block title %}Baseball Draft{% endblock %}
 {% block css %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('static', filename='confirm.css') }}">
+  {# PAGE BACKGROUND: the baseball picture, covering the window and fixed in place. #}
   <style>
     body { background: #0b1220 url("{{ url_for('static', filename='base_back.jpg') }}") center center / cover no-repeat fixed; }
   </style>
 {% endblock %}
 {% block scripts %}
+  {# (This block does not call {{ super() }}; that is fine because base.html's scripts block is empty.) #}
   <script src="{{ url_for('static', filename='confirm.js') }}"></script>
 {% endblock %}
 
 
 {% block body %}
+  {# THE cfg DICTIONARY for partials/confirm_ui.html:
+       sport       'Baseball': shown in the title; lower-cased it becomes the theme class "theme-baseball"
+       home        where the "Back to Baseball" link and the Cancel button go (the baseball setup page)
+       confirm     where the custom pool picker form posts (back to routes.py: bb_confirm)
+       draft       where the "Name your draft" form posts (routes.py: bb_draft)
+       logo_dir    the logo folder name:  Logos/fictional/<logo_dir>/<Team>_<logo_code>.png
+       logo_code   the logo file-name ending ("Neptunes_bb.png")
+       pos_field   which key of each player holds his position: short_pos for baseball
+       groups      the POSITION GROUPS, one box each in the custom picker, and one chip each in the summary:
+                     code    a short id (confirm.js uses it to link a group's counter to its progress pill)
+                     title   the heading shown
+                     match   the position values that belong to the group (a player's pos_field must be one of
+                             these). NOTE: there is no group for "DH", so designated hitters never appear in the
+                             custom picker or the summary chips.
+                     mult    how many players of this group are needed PER TEAM. The number you must pick is
+                             (number of teams) x mult. The numbers match the Random pool sizes in
+                             services.py: load_baseball (2 per field position, 7 SP and 7 RP per team). #}
   {% set cfg = {
     'sport': 'Baseball',
     'home': url_for('main.start_baseball'),
@@ -33,8 +80,6 @@
       {'code': 'RP', 'title': 'Relief Pitchers',   'match': ['RP'], 'mult': 7},
     ]
   } %}
+  {# Draw the shared confirm page. It can see cfg and all the route's variables. #}
   {% include "partials/confirm_ui.html" %}
 {% endblock %}
-
-
-

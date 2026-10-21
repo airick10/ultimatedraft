@@ -1,8 +1,42 @@
+{#-
+  ===========================================================================================
+  bkdraft.html  --  THE BASKETBALL DRAFT BOARD.
+
+  The same page as bbdraft.html. READ THE NOTES AT THE TOP OF bbdraft.html FIRST (what the page shows, the
+  variables, the HTML ids the JavaScript depends on, the window.DRAFT object, the background overlay). The
+  comments below only describe each block briefly and say where basketball DIFFERS.
+
+  RENDERED BY
+    routes.py: bk_draft()  (POST /bk_draft)     routes.py: bk_load()  (POST /bk_load)
+  EXTENDS:  base.html        STYLES: static/bkstyle.css
+  SCRIPTS (in order): draft_bk.js, draft_common.js, poolsearch.js
+
+  DIFFERENCES FROM bbdraft.html
+    - background picture static/hardwood.jpg (and an unused --dirt-bg variable pointing at it)
+    - the position tabs are All / C / F / G / DEF. DEFENSE UNITS (position "DEF") are rows hidden until you click
+      the DEF tab; that tab also swaps to its own header row.
+    - THERE ARE TWO HEADER ROWS (player-head and def-head) and NO "All" layout: no tableHead id, no stat-all
+      columns. The headers call sortTable(NUMBER) with a plain column number; baseball and football call
+      sortTable(this).
+    - the Strat columns are hidden right in the HTML with style="display:none". Baseball and football hide the
+      unused column groups with JavaScript (applyColumns) instead.
+    - roster blocks use the one shared roster_slots list for every team (no per-team team_slots; there are no
+      two-way players, so no FLEX slots), and the roster names come straight from the pick (no label_by_id).
+    - the draft log line has no "two-way" form.
+    - current_pick is NOT passed by the route; the page works it out as "log entries + 1", which is right for
+      basketball (no twin entries).
+
+  VARIABLES (from the route): draftname, sport ("bk"), current_team, current_team_type, draft_log, all_teams,
+    roster_slots, roster_assignments, cap, players, url_by_id.
+  (Passed but not used here: logo_rows, pool, draft_file, num_teams, human_teams, ai_set.)
+  ===========================================================================================
+-#}
 {% extends "base.html" %}
 {% block title %}Basketball Draft{% endblock %}
 {% block css %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('static', filename='bkstyle.css') }}">
+  {# --dirt-bg is defined but no stylesheet uses it (see bbdraft.html). #}
   <style>
     body { --dirt-bg: url("{{ url_for('static', filename='hardwood.jpg') }}"); }
   </style>
@@ -12,6 +46,8 @@
 {% block scripts %}
 <script>
 /* this draft's server values; everything else lives in static/draft_*.js */
+{# The window.DRAFT object: see bbdraft.html for what each value is. Basketball's labels is always empty (the route
+   doesn't pass label_by_id), and currentPick uses the "log + 1" fallback. #}
 window.DRAFT = {
     draftname:       {{ draftname|tojson }},
     sport:           {{ sport|tojson }},
@@ -33,9 +69,12 @@ window.DRAFT = {
 
 
 {% block body %}
+{# True only when the draft has a salary cap (see bbdraft.html); controls every Salary column. #}
 {% set show_salary = (cap|string|replace(',', '')|replace('$', '')|float(0)) > 0 %}
+{# The background picture layer (static/hardwood.jpg): fixed, 30% opacity, clicks pass through. See bbdraft.html. #}
 <div style="position:fixed;inset:0;background:url('{{ url_for('static', filename='hardwood.jpg') }}') center/cover;opacity:0.3;z-index:9999;pointer-events:none;"></div>
 
+{# NAV STRIP: Home / Export Excel / Export Log / Export Report / View Report (new tab). #}
 <div class="nav-strip">
     <a href="{{ url_for('main.start_basketball') }}"> Home</a>
     <a href="{{ url_for('main.bk_export', draftname=draftname) }}" style="margin-left:16px">Export Excel</a>
@@ -44,9 +83,11 @@ window.DRAFT = {
     <a href="{{ url_for('main.bk_report', draftname=draftname, view=1) }}" target="_blank" style="margin-left:16px">View Report</a>
 </div>
 
+{# THE LOGO STRIP: empty; draft_common.js fills and animates it. #}
 <div class="logo-strip" id="logoStrip"></div>
 
 <!-- Draft Ticker -->
+{# THE TICKER: announcement, Start / Resume / Stop button, pick clock (see bbdraft.html). #}
 <div class="draft-ticker">
     <div class="ticker-announcement" id="tickerAnnouncement">Draft starting...</div>
     <div class="ticker-controls">
@@ -55,9 +96,12 @@ window.DRAFT = {
 </div>
 </div>
 
+{# THE THREE PANES (stacked on tablets and phones by responsive.css). #}
 <div class="draft-body">
 
   <!-- Left: rosters with dropdown -->
+  {# LEFT PANE: the Draft Log. One plain line per pick; "No picks yet" when the log is empty. (The HTML comment
+     above says "rosters with dropdown": a leftover from an older layout; the dropdown is in the RIGHT pane.) #}
   <div class="pane-left">
     <h6>Draft Log</h6>
     <div id="draftLog">
@@ -71,9 +115,11 @@ window.DRAFT = {
 </div>
 
   <!-- Center: player pool -->
+  {# CENTER PANE: THE PLAYER POOL. #}
   <div class="pane-center">
     <div class="pane-center-header">
         <div class="draft-title">{{ draftname }} — Player Pool</div>
+        {# The position tabs. DEF shows the defense units (draft_bk.js filterPos). #}
         <div class="pos-filter">
             <button class="btn-pos active" onclick="filterPos(this,'ALL')">All</button>
             <button class="btn-pos" onclick="filterPos(this,'C')">C</button>
@@ -81,6 +127,7 @@ window.DRAFT = {
             <button class="btn-pos" onclick="filterPos(this,'G')">G</button>
             <button class="btn-pos" onclick="filterPos(this,'DEF')">DEF</button>
         </div>
+        {# Search box, match counter, and the Real / Strat dropdown. #}
         <div class="pool-tools">
             <input id="playerSearch" class="pool-search" type="search" autocomplete="off"
                    placeholder="Search first or last name   ( / )">
@@ -93,8 +140,15 @@ window.DRAFT = {
     </div>
 
     <!-- Sticky header table -->
+    {# THE TABLE HEADER (its own <table>, so it stays put while the rows scroll). Two header rows; draft_bk.js
+       filterPos() shows player-head for every tab except DEF, and def-head for the DEF tab.
+       Each header cell calls sortTable(N), where N is the VISIBLE column number (0 = Pos, 1 = Name, 2 = Team, 3...
+       the stats). The Real columns show; the Strat columns carry style="display:none" until the dropdown switches
+       to Strat. The same column numbers are reused by the real and strat cells because only one group is
+       ever visible at a time. #}
     <table class="player-table">
        <thead>
+            {# player-head: real = PPG, RPG, APG, FG%; strat = OMade, IMade, PassDazz, Dsteal. #}
             <tr id="player-head">
                 <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
                 <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
@@ -110,6 +164,8 @@ window.DRAFT = {
                 <th class="stat-strat" style="display:none" onclick="sortTable(6)">Dsteal <span class="sort-icon">↕</span></th>
                 {% if show_salary %}<th class="stat-strat" style="display:none" onclick="sortTable(7)">Salary <span class="sort-icon">↕</span></th>{% endif %}
             </tr>
+            {# def-head (hidden until the DEF tab): defense units; both groups show OMade, PMade, IMade, FMade (the
+               opponent's makes against that defense). #}
             <tr id="def-head" style="display:none">
                 <th onclick="sortTable(0)">Pos <span class="sort-icon">↕</span></th>
                 <th onclick="sortTable(1)">Name <span class="sort-icon">↕</span></th>
@@ -129,14 +185,19 @@ window.DRAFT = {
     </table>
 
     <!-- Scrollable body -->
+    {# THE TABLE BODY: one row per player or defense unit (same data-* attributes as baseball: data-pos, data-id,
+       data-sal, data-url). #}
     <div class="pane-center-scroll">
         <table class="player-table">
             <tbody id="playerBody">
                 {% for p in players %}
                 {% if p.kind == 'defense' %}
+                {# A DEFENSE UNIT row: data-pos="DEF", name from p.name, logo from Team_Logo, and style="display:none" so it
+                   stays hidden until the DEF tab is clicked (draft_bk.js onReady hides these too). #}
                 <tr data-pos="DEF" data-id="{{ p.id }}" data-sal="{{ p.Salary }}" data-url="{{ p.BasketballReferenceURL }}" style="display:none">
                     <td class="pos-badge">DEF</td>
                     <td>{{ p.name }}</td>
+                    {# The team cell: logo from Logos/basketball/<Team_Logo>.png, with a text fallback if the picture fails. #}
                     <td class="team-cell">
                       {% if p.Team_Logo %}
                       <img class="team-logo" src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/basketball/{{ p.Team_Logo }}.png"
@@ -157,6 +218,8 @@ window.DRAFT = {
                     {% if show_salary %}<td class="stat-strat" style="display:none">{{ p.Salary if p.Salary is defined else '—' }}</td>{% endif %}
                 </tr>
                 {% else %}
+                {# A PLAYER row: data-pos is his Pos (C / F / G). Real columns: points, rebounds, assists per game and
+                   FG%; Strat columns: OMade, IMade, PassDazz, Dsteal. #}
                 <tr data-pos="{{ p.Pos }}" data-id="{{ p.id }}" data-sal="{{ p.Salary }}" data-url="{{ p.BasketballReferenceURL }}">
                     <td class="pos-badge">{{ p.Pos }}</td>
                     <td>{{ p.FirstName }} {{ p.LastName }}</td>
@@ -186,6 +249,7 @@ window.DRAFT = {
         </table>
     </div>
 
+    {# THE SELECTED-PLAYER BAR (name, stats, Draft button). #}
     <div class="player-select-bar" id="selectBar">
         <div class="selected-name" id="selectedName">Click a player to select</div>
         <div class="selected-stats" id="selectedStats"></div>
@@ -194,6 +258,7 @@ window.DRAFT = {
   </div>
 
   <!-- Right: on-the-clock -->
+  {# RIGHT PANE: on the clock, the roster dropdown, "Salary left", and a roster block per team. #}
   <div class="pane-right">
     <h6>On the Clock</h6>
     <div class="on-clock" id="clockTeam">{{ current_team }}</div>
@@ -207,6 +272,9 @@ window.DRAFT = {
 </select>
     <div class="salary-left" id="salaryLeft" style="display:none"></div>
 
+    {# ONE ROSTER BLOCK PER TEAM. DIFFERENCE: every team uses the same roster_slots (C, F, F, G, G, six UT, Def), so
+       the loop is over roster_slots, not a per-team list. A filled slot shows "POS: Name" (a link when the player has
+       a reference URL); an empty one shows "SLOT: —". #}
     {% for team in all_teams %}
 <div class="roster-team" id="roster-{{ team.name }}" style="display:none">
     <div class="t-name">{{ team.name }}</div>

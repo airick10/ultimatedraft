@@ -1,19 +1,57 @@
+{#-
+  ===========================================================================================
+  baseball.html  --  the BASEBALL SETUP PAGE. Where you set up a new draft (how many teams, which are yours,
+  the player pool, the salary cap, Berserker mode) or reopen / delete a saved one.
+
+  THIS FILE IS A THIN WRAPPER. The real form lives in templates/partials/setup_ui.html, which all three sports
+  share. This file only (1) loads the right stylesheets, background picture and script, and (2) hands the partial
+  a "cfg" dictionary describing baseball.
+  basketball.html and football.html are the same file with different values (listed in each).
+
+  RENDERED BY:   routes.py: start_baseball()  (the "/baseball" address).
+  EXTENDS:       base.html
+  INCLUDES:      partials/setup_ui.html
+  SCRIPT:        static/setup.js  (the form's behavior: team counter, cap box, summary bar, delete confirm)
+  STYLES:        confirm.css (which imports themes.css) and setup.css
+
+  VARIABLES PASSED IN BY THE ROUTE (used by the partial, not here)
+    saved_drafts   list of text   the saved baseball drafts' file names, e.g. ["FallLeague_bb.json"]
+    cap_default    number         the suggested salary cap (0 if it couldn't be worked out)
+    cap_options    list of (label, amount)   the Tight / Suggested / Loose preset buttons ([] if none)
+  ===========================================================================================
+-#}
 {% extends "base.html" %}
 {% block title %}Baseball Draft{% endblock %}
 {% block css %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('static', filename='confirm.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='setup.css') }}">
+  {# PAGE BACKGROUND: the baseball picture, covering the whole window and fixed in place. The color #0b1220 (dark
+     navy) shows while the picture loads. The sport's dark overlay (--overlay in themes.css) is drawn on top by
+     .cf-wrap::before.
+     CHANGE: the picture file name (static/base_back.jpg) to use a different background. #}
   <style>
     body { background: #0b1220 url("{{ url_for('static', filename='base_back.jpg') }}") center center / cover no-repeat fixed; }
   </style>
 {% endblock %}
 {% block scripts %}
+  {# Keep base.html's (empty) scripts block, then add setup.js. #}
   {{ super() }}
   <script src="{{ url_for('static', filename='setup.js') }}"></script>
 {% endblock %}
 
 {% block body %}
+  {# THE cfg DICTIONARY: everything partials/setup_ui.html needs to know about THIS sport.
+       sport        the sport's name: shown in the title ("Baseball Draft"); lower-cased it also becomes the theme
+                    class "theme-baseball" (see themes.css)
+       home         where the "All sports" back link goes (the landing page)
+       load         the address the "Open" button posts to (routes.py: bb_load)
+       delete       the address the "Delete" button posts to (routes.py: bb_delete)
+       confirm      the address the new-draft form posts to (routes.py: bb_confirm)
+       logos        the address htmx fetches the team-picker grid from (routes.py: show_bb_logos)
+       cap_presets  the three amounts below are NOT read by the partial (the preset buttons come from the route's
+                    cap_options instead), so this line has no effect. It is a leftover; basketball and football
+                    set it to an empty list. #}
   {% set cfg = {
     'sport': 'Baseball',
     'home': url_for('main.index'),
@@ -23,5 +61,6 @@
     'logos': url_for('main.show_bb_logos'),
     'cap_presets': [75000000, 100000000, 125000000]
   } %}
+  {# Draw the shared setup form. It can see cfg and the route's variables (saved_drafts, cap_default, cap_options). #}
   {% include "partials/setup_ui.html" %}
 {% endblock %}

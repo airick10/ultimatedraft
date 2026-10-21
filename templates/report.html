@@ -1,3 +1,41 @@
+{#-
+  ===========================================================================================
+  report.html  --  THE DRAFT REPORT: a standalone web page with every team's stats and the Team Rankings.
+
+  WHAT IT SHOWS
+    - a sticky top bar: a Teams menu, a Rankings link, Both / Real Stats / Strat Ratings buttons, a player search
+      box, and a Collapse all button
+    - one collapsible card per team: its logo, name, a "Human" badge for your teams, a one-line summary, then a
+      Real Stats section and a Strat section, each a set of sortable tables with a Total / Average row
+    - the TEAM RANKINGS tables at the bottom (one row per team, sortable, best / worst colored)
+
+  IT IS STANDALONE. It does NOT extend base.html: it has its own <html>, its own <style> and its own <script>, so
+  the downloaded .html file works by itself in any browser (it only needs the internet for the team and player
+  logo pictures). That is why the CSS and JS live inside {% raw %} blocks: Jinja would otherwise try to read the
+  curly braces in them as template code. Comments INSIDE those blocks are ordinary CSS / JS comments and travel with
+  the downloaded file; the Jinja comments in this header and around the macro do not.
+
+  RENDERED BY
+    routes.py: bb_report(), bk_report(), fb_report()  (GET /bb_report/<draftname> etc.). Add ?view=1 to show the
+    report in the browser instead of downloading it. bb_report also adds the per-team JSON links (json_urls).
+
+  VARIABLES (built by exports.py: build_bb_report_context / build_bk_report_context / build_fb_report_context)
+    title         the draft's name                       sport_label   "Baseball" / "Basketball" / "Football"
+    generated     when the report was made ("2026-10-18 14:30")
+    teams         list of teams, each with:
+                    name, slug (an anchor id like "team-black-crows"), logo (address), is_human (True / False),
+                    meta (the line under the name), sections (a "real" and a "strat" section, each with tables;
+                    a table has label, cols, rows, foot) and, for baseball only, json_urls {hitters, pitchers}
+    rankings      list of ranking tables (a "real" and a "strat" block), each with cls, title, headers, rows
+    (See exports.py, section 5, for the exact shape of every cell.)
+
+  WHERE TO CHANGE THINGS
+    Colors ............ the :root{ ... } line at the top of the <style> block
+    The font .......... the body{ ... font: ... } line in the <style> block (the report uses a system font; it does
+                        not use anything from static/ or the Google Fonts link in base.html)
+    What columns exist .. exports.py (the column lists), not this file
+  ===========================================================================================
+-#}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,74 +44,112 @@
 <title>{{ title }} - {{ sport_label }} Draft Results</title>
 <style>
 {% raw %}
+/* ============================================================================================
+   THE REPORT'S STYLES. A light theme (white cards on a light grey page) with a navy header bar and gold accents.
+   ============================================================================================ */
+
+/* COLOR VARIABLES: change these seven values to recolor the whole report.
+     --navy  the top bar            --gold  accents: the bar's bottom line, active buttons, section headings, badges
+     --ink   main text              --muted  quieter text (counts, notes)
+     --line  thin borders           --bg  the page background        --card  card and table background */
 :root{--navy:#14213d;--gold:#c9a84c;--ink:#1f2937;--muted:#6b7280;--line:#e5e7eb;--bg:#f3f4f6;--card:#fff}
+/* box-sizing:border-box = padding and borders count INSIDE an element's width (easier sizing). */
 *{box-sizing:border-box}
+/* smooth scrolling when a link jumps to another part of the page (#team-..., #rankings) */
 html{scroll-behavior:smooth}
+/* THE PAGE FONT: a system font stack (the font your computer uses for its own menus). 14px with a 1.45 line height. */
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+/* the HTML "hidden" attribute always wins (the menu, filtered rows and teams use it) */
 [hidden]{display:none!important}
 
 /* ---- sticky nav ---- */
+/* The top bar stays at the top while you scroll (position: sticky), above everything (z-index 50). */
 .nav{position:sticky;top:0;z-index:50;background:var(--navy);color:#fff;border-bottom:3px solid var(--gold)}
 .nav-inner{max-width:1400px;margin:0 auto;padding:8px 16px;min-height:56px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+/* The draft's name on the left (margin-right:auto pushes everything else to the right) with the sport in gold. */
 .brand{color:#fff;text-decoration:none;font-weight:700;font-size:1.05rem;margin-right:auto}
 .brand span{color:var(--gold);font-weight:500;margin-left:8px}
+/* The bar's buttons, the Rankings link and the search box share one see-through look. */
 .nav button,.nav input,.nav a.navlink{font:inherit;border-radius:6px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;padding:6px 12px}
 .nav button,.nav a.navlink{cursor:pointer}
 .nav a.navlink{text-decoration:none}
 .nav button:hover,.nav a.navlink:hover{background:rgba(255,255,255,.18)}
 .nav input{width:170px}
 .nav input::placeholder{color:rgba(255,255,255,.6)}
+/* The Both / Real Stats / Strat Ratings buttons joined into one bar; the chosen one (class "on") is gold. */
 .seg{display:flex}
 .seg button{border-radius:0;margin-left:-1px}
 .seg button:first-child{border-radius:6px 0 0 6px;margin-left:0}
 .seg button:last-child{border-radius:0 6px 6px 0}
 .seg button.on{background:var(--gold);color:#111;border-color:var(--gold);font-weight:600}
+/* The Teams drop-down menu (a white panel under the button). */
 .menu{position:relative}
 .menu-list{position:absolute;right:0;top:calc(100% + 8px);min-width:230px;max-height:70vh;overflow:auto;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.2);padding:6px}
 .menu-list a{display:block;padding:7px 10px;border-radius:6px;color:inherit;text-decoration:none}
 .menu-list a:hover{background:var(--bg)}
+/* The team you are currently looking at is marked (class "active", set by the scroll watcher at the bottom). */
 .menu-list a.active{font-weight:600;box-shadow:inset 3px 0 var(--gold);background:var(--bg)}
 
 /* ---- team cards ---- */
 main{padding:4px 16px 40px}
+/* One team's card. scroll-margin-top keeps its top clear of the sticky bar when you jump to it. */
 .team{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:18px auto;max-width:1400px;scroll-margin-top:96px;overflow:hidden}
+/* The card's header (logo, name, summary, arrow). Click it to collapse / expand the card. */
 .team-head{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;user-select:none}
 .team-logo{height:44px;width:auto}
 .team-head h2{margin:0;font-size:1.2rem}
+/* The small gold "HUMAN" pill after the names of the teams you control. */
 .badge{margin-left:10px;font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--gold);color:#111;padding:2px 8px;border-radius:999px;vertical-align:middle}
 .meta{margin-left:auto;color:var(--muted)}
+/* The little arrow; it turns sideways when the card is collapsed (class "collapsed" on the card). */
 .chev{transition:transform .2s;color:var(--muted)}
 .collapsed .chev{transform:rotate(-90deg)}
 .collapsed .team-body{display:none}
 .team-body{padding:4px 16px 18px;border-top:1px solid var(--line)}
+/* Section headings inside a card ("REAL STATS", "STRAT-O-MATIC RATINGS") and table labels ("Hitters", "Pitchers"). */
 .sec h3{margin:18px 0 2px;font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);border-bottom:1px solid var(--line);padding-bottom:4px}
 .sec h4{margin:12px 0 6px;font-size:.95rem}
+/* THE BOTH / REAL / STRAT SWITCH: the buttons set data-view on <body>; these two rules hide the section that
+   isn't wanted (this also hides the matching Team Rankings table). */
 body[data-view="real"] .sec-strat,body[data-view="strat"] .sec-real{display:none}
 
 /* ---- tables ---- */
+/* Each table sits in a bordered box that scrolls sideways if the table is wider than the screen. */
 .tbl-wrap{display:inline-block;max-width:100%;overflow-x:auto;vertical-align:top;border:1px solid var(--line);border-radius:8px}
+/* tabular-nums = every digit the same width, so numbers line up in columns. */
 table.stat{border-collapse:separate;border-spacing:0;width:auto;font-variant-numeric:tabular-nums}
 table.stat th.name,table.stat td.name{min-width:200px}
 table.stat th.team,table.stat td.team{min-width:50px}
 table.stat th.num,table.stat td.num{min-width:56px}
+/* Cells: right-aligned numbers by default; nowrap keeps each value on one line. */
 table.stat th,table.stat td{padding:6px 10px;white-space:nowrap;border-bottom:1px solid var(--line);text-align:right}
 table.stat tbody tr:last-child td{border-bottom:0}
+/* Header cells are clickable (they sort the column), so they get a pointer cursor. */
 table.stat th{background:#f9fafb;font-size:.7rem;letter-spacing:.05em;text-transform:uppercase;color:#4b5563;cursor:pointer;user-select:none}
 table.stat th:hover{color:var(--ink)}
+/* Name, text and team columns are left-aligned. */
 table.stat th.name,table.stat th.text,table.stat th.team,
 table.stat td.name,table.stat td.text,table.stat td.team{text-align:left}
+/* Zebra stripes and a pale yellow highlight on the row under the mouse. */
 table.stat td{background:#fff}
 table.stat tbody tr:nth-child(even) td{background:#fafafa}
 table.stat tbody tr:hover td{background:#fef9e7}
+/* The name column stays visible (position: sticky) when you scroll a wide table sideways. */
 table.stat td.name,table.stat th.name{position:sticky;left:0;z-index:1;box-shadow:1px 0 0 var(--line)}
+/* Player names are links to their reference pages. */
 table.stat td.name a{color:#0b5cab;font-weight:500;text-decoration:none}
 table.stat td.name a:hover{text-decoration:underline}
 table.stat td.team img{height:24px;width:auto;vertical-align:middle}
+/* Bold cells (the key OBTB ratings). */
 table.stat td.strong{font-weight:700}
+/* The sort arrows (▲ ▼) added to the header you last sorted by (the script sets data-dir). */
 table.stat th[data-dir="asc"]::after{content:" \25B2";font-size:.6rem}
 table.stat th[data-dir="desc"]::after{content:" \25BC";font-size:.6rem}
+/* The "None" row for an empty table. */
 tr.none td{text-align:center!important;color:var(--muted)}
+/* The Total / Average row at the bottom of a table. */
 table.stat tfoot td{background:#eef2f7;font-weight:700;color:#111827;border-top:2px solid #cbd5e1;border-bottom:0}
+/* The baseball-only row of "Hitters JSON / Pitchers JSON" download links at the top of a team's card. */
 .json-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0 2px;font-size:.85rem;color:var(--muted)}
 .json-bar a{padding:4px 12px;border-radius:999px;border:1px solid var(--line);background:#f9fafb;color:#0b5cab;
   text-decoration:none;font-weight:600}
@@ -81,18 +157,24 @@ table.stat tfoot td{background:#eef2f7;font-weight:700;color:#111827;border-top:
 footer{text-align:center;color:var(--muted);padding:0 0 30px;font-size:.8rem}
 
 /* ---- team rankings ---- */
+/* The Team Rankings panel at the bottom: a card like the team cards. */
 .rankings{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:26px auto 0;max-width:1400px;
   padding:16px 16px 20px;scroll-margin-top:96px}
 .rankings h2{margin:0 0 4px;font-size:1.2rem}
 .rank-note{margin:0 0 4px;color:var(--muted);font-size:.85rem}
+/* A team's logo and name in the rankings table. */
 .rk-link{display:inline-flex;align-items:center;gap:8px}
 .rk-logo{height:24px;width:auto}
+/* THE BEST AND WORST TEAM IN EACH COLUMN: green and red. !important so they beat the zebra stripes and hover color. */
 table.stat td.best{background:#dcfce7!important;font-weight:700}
 table.stat td.worst{background:#fee2e2!important}
 
+/* PRINTING: hide the top bar, open every collapsed card, and avoid splitting a team across two pages. */
 @media print{.nav{display:none}.team-body{display:block!important}.team{break-inside:avoid-page}}
 
 /* ---- phones and small tablets ---- */
+/* At 700px and under: the bar's pieces wrap onto more lines, the Teams menu spans the screen, the cards and tables
+   get tighter padding, and the search box uses a 16px font (so iPhones don't zoom in when you tap it). */
 @media (max-width: 700px) {
   .nav-inner { padding: 8px 10px; gap: 8px; }
   .brand { flex: 1 1 100%; margin-right: 0; }
@@ -119,6 +201,18 @@ table.stat td.worst{background:#fee2e2!important}
 </head>
 <body data-view="both">
 
+{# THE stat_table MACRO. A macro is a reusable template "function": it is defined once here and called once per
+   table below ({{ stat_table(tb.cols, tb.rows, tb.foot) }}).
+     cols  the header cells, each {h: header text, kind: "name" / "team" / "num" / "text"} (kind becomes the CSS class)
+     rows  the table body: a list of rows, each a list of cells {kind, text, sort, ...}
+     foot  the Total / Average row's cells, or None for no footer
+   WHAT A CELL BECOMES:
+     kind "name"  the player's name, as a link to his reference page when the cell has a url
+     kind "team"  the real team's logo (a text fallback appears if the picture fails to load)
+     other        the text, in a cell classed by its kind (and "strong" for bold)
+   Every cell has data-sort: the value the sort script compares (so "$1,250,000" sorts as a number). Each row has
+   data-name (the lowercase name of its first cell), which the player search reads. A table with no rows shows
+   "None". #}
 {% macro stat_table(cols, rows, foot=None) %}
 <div class="tbl-wrap">
 <table class="stat">
@@ -151,6 +245,9 @@ table.stat td.worst{background:#fee2e2!important}
 </div>
 {% endmacro %}
 
+{# THE STICKY TOP BAR. Left to right: the draft's name and sport; the Teams menu (a button that opens a list of links,
+   one per team); a Rankings link (only if there are rankings); the Both / Real / Strat switch; the player search
+   box; and the Collapse all button. The JavaScript at the bottom of the file makes them work. #}
 <header class="nav" id="top">
   <div class="nav-inner">
     <a class="brand" href="#top">{{ title }}<span>{{ sport_label }} Draft Results</span></a>
@@ -172,6 +269,8 @@ table.stat td.worst{background:#fee2e2!important}
 </header>
 
 <main>
+{# ONE CARD PER TEAM. The id (the team's slug) is what the Teams menu and the rankings table link to. The header
+   (role="button", tabindex="0") is clickable and keyboard-operable to collapse the card. #}
 {% for t in teams %}
 <section class="team" id="{{ t.slug }}">
   <div class="team-head" role="button" tabindex="0" aria-expanded="true">
@@ -181,6 +280,8 @@ table.stat td.worst{background:#fee2e2!important}
     <span class="chev">&#9662;</span>
   </div>
       <div class="team-body">
+      {# Baseball only: the two download links for this team's hitters and pitchers as JSON in your source-file format.
+         The addresses are added by routes.py: bb_report (they point at bb_team_json). #}
       {% if t.json_urls %}
       <div class="json-bar">
         <span>Roster data in your source-file format:</span>
@@ -188,6 +289,8 @@ table.stat td.worst{background:#fee2e2!important}
         <a href="{{ t.json_urls.pitchers }}">Pitchers JSON</a>
       </div>
       {% endif %}
+      {# The team's two sections ("real" and "strat"), each a heading and its tables. The section's class (sec-real /
+         sec-strat) is what the Both / Real / Strat switch hides and shows. #}
       {% for sec in t.sections %}
     <div class="sec sec-{{ sec.cls }}">
       <h3>{{ sec.title }}</h3>
@@ -201,6 +304,12 @@ table.stat td.worst{background:#fee2e2!important}
 </section>
 {% endfor %}
 
+{# THE TEAM RANKINGS (only when the report has them). One table per block (a "real" block and a "strat" block, so the
+   Both / Real / Strat switch shows the right one). Each row is a team: its name (a link that jumps to and opens that
+   team's card), its overall Rank and average rank (Avg Rk), then one column per ranked stat. A cell colored green
+   is the best team in that column, red the worst (the "best" / "worst" flag from exports.py: build_rankings).
+   The "lowfirst" class on a header means "the first click sorts smallest-first" (Rank, Avg Rk, and stats where lower
+   is better such as ERA). #}
 {% if rankings %}
 <section class="rankings" id="rankings">
   <h2>Team Rankings</h2>
@@ -238,11 +347,19 @@ table.stat td.worst{background:#fee2e2!important}
 
 <script>
 {% raw %}
+/* ============================================================================================
+   THE REPORT'S BEHAVIOR (all plain JavaScript; wrapped in a function so its names stay private).
+   Pieces: the Teams menu, the rankings links, the Both / Real / Strat switch, column sorting, the player search,
+   collapse / expand, and the "which team am I looking at" highlight in the menu.
+   ============================================================================================ */
 (function () {
+  /* Shortcuts: $ finds ONE element, $$ finds ALL matching elements (as a real array). */
   const $  = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
   // ---- Teams menu ----
+  /* Click the Teams button to open / close the list; clicking anywhere else, or pressing Escape, closes it.
+     Choosing a team also opens that team's card (removes "collapsed") so the jump lands on something visible. */
   const btn = $('#teamsBtn'), menu = $('#teamsMenu');
   function setMenu(open) { menu.hidden = !open; btn.setAttribute('aria-expanded', String(open)); }
   btn.addEventListener('click', e => { e.stopPropagation(); setMenu(menu.hidden); });
@@ -257,12 +374,15 @@ table.stat td.worst{background:#fee2e2!important}
   });
 
   // ---- team names in the rankings table jump to (and open) that team ----
+  /* Same idea for the team names inside the Team Rankings table. */
   $$('a.rk-link').forEach(a => a.addEventListener('click', () => {
     const team = document.getElementById(a.getAttribute('href').slice(1));
     if (team) team.classList.remove('collapsed');
   }));
 
   // ---- view switch: both / real / strat ----
+  /* The three buttons set data-view on <body>; the CSS near the top then hides the sections that aren't wanted.
+     The chosen button gets the class "on" (gold). */
   const seg = $('#viewSeg');
   seg.addEventListener('click', e => {
     const b = e.target.closest('button');
@@ -272,6 +392,12 @@ table.stat td.worst{background:#fee2e2!important}
   });
 
   // ---- click a column header to sort ----
+  /* Every table (team tables and ranking tables) is sortable by clicking a header. The first click sorts one way and
+     the next click reverses it; the arrow (▲ ▼) shows the direction (via the data-dir attribute).
+       - Number columns sort BIGGEST first on the first click (the "num" class) ... except columns marked
+         "lowfirst" (Rank, Avg Rk, and lower-is-better stats), which sort SMALLEST (best) first.
+       - Text columns sort A to Z first.
+       - Rows compare their data-sort values: numbers as numbers, anything else as text. Blank values always go last. */
   $$('table.stat').forEach(table => {
     const heads = $$('thead th', table);
     heads.forEach((th, i) => th.addEventListener('click', () => {
@@ -296,6 +422,9 @@ table.stat td.worst{background:#fee2e2!important}
   });
 
   // ---- player search ----
+  /* Typing in the search box hides every player row (inside the team cards) whose name doesn't contain the text,
+     hides a whole team card when none of its players match, and opens the cards that do match. The Team Rankings
+     tables are not searched. */
   const search = $('#search');
   search.addEventListener('input', () => {
     const q = search.value.trim().toLowerCase();
@@ -312,6 +441,8 @@ table.stat td.worst{background:#fee2e2!important}
   });
 
   // ---- collapse / expand ----
+  /* Clicking (or pressing Enter / Space on) a team's header opens or closes its card. The "Collapse all" button
+     closes every card, and then becomes "Expand all" to open them all again. */
   $$('.team-head').forEach(h => {
     const toggle = () => {
       const t = h.parentElement;
@@ -331,6 +462,9 @@ table.stat td.worst{background:#fee2e2!important}
   });
 
   // ---- highlight the team you're looking at in the menu ----
+  /* An IntersectionObserver watches every team card. When a card scrolls into the band just below the sticky bar
+     (rootMargin: ignore the top 90px and the bottom 70% of the window), its link in the Teams menu gets the class
+     "active" (gold edge, bold) and the others lose it. */
   const links = new Map($$('#teamsMenu a').map(a => [a.dataset.slug, a]));
   const io = new IntersectionObserver(entries => {
     entries.forEach(en => {

@@ -1,25 +1,108 @@
+{#-
+  ===========================================================================================
+  base.html  --  the SHELL that every page (except the HTML report) is built on.
+
+  HOW TEMPLATE INHERITANCE WORKS (the idea behind all the pages)
+    A page like baseball.html starts with  {% extends "base.html" %}  which means "use base.html as my
+    outer frame and fill in its blanks". The blanks are the {% block name %} ... {% endblock %} pairs
+    below. Each child page supplies content for the blocks it cares about; anything it leaves out keeps
+    base.html's own content. Inside a child's block,  {{ super() }}  means "also include what the parent
+    put in this block".
+
+  THE BLOCKS DEFINED HERE
+    css      in <head>, BEFORE Bootstrap. Holds styles.css by default; children add their own stylesheets.
+    title    the browser tab's title.
+    body     the page content.
+    scripts  at the very end of <body>, AFTER Bootstrap's script. Children add their own scripts.
+
+  RENDERED BY / USED BY
+    Every template except report.html extends this one: index.html, baseball.html, basketball.html,
+    football.html, bb_confirm.html, bk_confirm.html, fb_confirm.html, bbdraft.html, bkdraft.html,
+    fbdraft.html. (report.html is a standalone page with its own <style> and <script>.)
+
+  WHAT THIS FILE LOADS, IN ORDER (the order matters; see the notes beside each line)
+    1. {% block css %}        styles.css, then whatever the page adds (its own CSS files)
+    2. Bootstrap 5.1.3 CSS    layout / reset styles from a CDN (a public file host)
+    3. Google Fonts           Commissioner, Texturina, Alfa Slab One, Barlow, Bebas Neue, Teko
+    4. responsive.css         the phone / tablet layouts. Loaded AFTER Bootstrap so it wins.
+    5. htmx                   lets the setup pages load the team-picker grid without a full page load
+    6. Socket.IO client       the live connection used by the draft boards (gives the global function io())
+    7. Bootstrap JS bundle    at the end of <body>
+    8. {% block scripts %}    the page's own scripts
+
+  IMPORTANT GOTCHA: Bootstrap's stylesheet loads AFTER the page-specific CSS (step 1 comes before step 2),
+  so where a Bootstrap rule and a rule from, say, bbstyle.css have the same strength, BOOTSTRAP WINS. That is
+  why a few spots use "!important", and why the draft boards paint their background picture with an
+  inline overlay element instead of a plain body background (see bbdraft.html). responsive.css comes after
+  Bootstrap, so it can override both.
+
+  WHERE TO CHANGE THINGS
+    Add a Google font ................ the long fonts.googleapis.com link below (see the README)
+    Swap Bootstrap / htmx / Socket.IO version .. their <link> / <script> lines (see the notes on each)
+    Page title text .................. each page's {% block title %}
+  ===========================================================================================
+-#}
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  {# Tell the browser the file's text encoding (so symbols like — and ↕ display correctly). #}
   <meta charset="utf-8">
+  {# MOBILE LAYOUT: tells phones to use the real screen width instead of pretending to be a 980px desktop.
+     Without this line, responsive.css's phone rules would never apply. #}
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  {# BLOCK css: page-specific stylesheets. The default is styles.css (the old base stylesheet; its body
+     background color is still live, see styles.css). Child pages write {{ super() }} to keep this line and add
+     their own <link> / <style> after it. url_for('static', filename='...') builds the address of a file in
+     the static folder. #}
   {% block css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   {% endblock %}
+
+  {# Bootstrap 5.1.3 (CSS only here): a reset plus layout helpers. It loads from the jsDelivr CDN, so the
+     pages need an internet connection. NOTE: loaded AFTER the css block above; see the gotcha in the header. #}
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  {# GOOGLE FONTS. The two "preconnect" lines warm up the connection to Google so the fonts load faster.
+     The long link then downloads every font family the site uses:
+        Commissioner, Texturina, Alfa Slab One (baseball titles), Barlow (body text on setup / confirm pages),
+        Bebas Neue (basketball titles), Teko (football titles).
+     "display=swap" shows text in a fallback font immediately and swaps in the real font when it arrives.
+     TO ADD A FONT: add  &family=Font+Name:wght@400;700  before &display=swap (spaces become +), then use it in
+     CSS (confirm.css / themes.css). The README has the full steps. #}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Commissioner:wght@100..900&family=Texturina:ital,opsz,wght@0,12..72,100..900;1,12..72,100..900&family=Alfa+Slab+One&family=Barlow:wght@400;500;600;700&family=Bebas+Neue&family=Teko:wght@400;500;600;700&display=swap" rel="stylesheet">
+
   <!-- loads last so it wins over the sport stylesheets and Bootstrap -->
+  {# responsive.css: the tablet and phone layouts. It is placed AFTER everything above on purpose, so its rules
+     win. (This is a normal HTML comment, kept from the original; it is visible in "view source".) #}
   <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
+
+  {# htmx 2.0.10: lets an element fetch a piece of HTML from the server and drop it into the page. The setup
+     pages use it to load the team-picker grid (hx-get on #logos in setup_ui.html). The "integrity" value is a
+     security fingerprint: the browser refuses the file if it doesn't match. If you change the htmx version you
+     MUST change this value too (get the new one from htmx's website). #}
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js" integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V" crossorigin="anonymous"></script>
+
+  {# Socket.IO client 4.7.2: the browser half of the live connection. It defines the global function io() that
+     static/draft_common.js calls. It sits in the <head> so it is ready before any page script runs.
+     Keep the client on the 4.x line to match the server (Flask-SocketIO 5.3.6 in requirements.txt). #}
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+  {# The browser tab's title. Each page fills it in. #}
   <title>{% block title %}{% endblock %}</title>
 </head>
 <body>
+{# BLOCK body: the page's content goes here. #}
 {% block body %}{% endblock %}
+
+{# Bootstrap's JavaScript bundle. None of the current pages appear to use Bootstrap's interactive components
+   (dropdowns, modals...), so this is mostly unused, but it is harmless and handy if you add them later. #}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
+{# BLOCK scripts: the page's own JavaScript. It is at the END of the body so the page's HTML exists before
+   the scripts run. Setup pages add setup.js; confirm pages add confirm.js; the draft boards add several. #}
 {% block scripts %}{% endblock %}
 </body>
 </html>
