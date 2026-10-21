@@ -1,11 +1,50 @@
-{# Shared UI for the three confirm pages. Expects `cfg` (set by the sport's template) plus the usual
-   route variables: mode, num_teams, human_teams, ai_set, pool, cap, players, saved_names, berserker #}
+{#
+  ===========================================================================================
+  confirm_ui.html  --  the SHARED CONFIRM PAGE used by all three sports.
+
+  THE PAGE HAS TWO FACES, chosen by the variable "mode":
+
+    mode == "final_confirm"   the page that names and starts the draft:
+        - the chips (teams, pool, cap, Berserker)
+        - the "Name your draft" card   (posts to cfg.draft, e.g. routes.py: bb_draft)
+        - the teams panel
+        - a pool summary with a "Browse all players" search
+
+    mode == "select_players"  the CUSTOM POOL PICKER (first visit of a Custom pool):
+        - a sticky bar of progress pills with "Random fill all" and Continue
+        - one box of checkboxes per position group
+        - posts BACK to cfg.confirm (routes.py: bb_confirm etc.), which then shows the final confirm
+
+  INCLUDED BY:   bb_confirm.html, bk_confirm.html, fb_confirm.html  (each sets cfg first).
+                 Cannot be opened on its own.
+
+  VARIABLES IT EXPECTS
+    cfg          dictionary set by the including page:
+                   sport, home, confirm, draft, logo_dir, logo_code, pos_field, groups
+                   (see bb_confirm.html for what each key means)
+    mode, num_teams, human_teams, ai_set, pool, cap, players, saved_names   from the route
+    berserker    True / False, supplied to every template by routes.py: inject_berserker
+
+  HOW CHOICES TRAVEL FROM PAGE TO PAGE
+    HTML forms only send what is inside them, so each form here repeats the earlier choices as HIDDEN fields:
+    num_teams, pool, cap, berserker (only when on), every human team, every AI team, and (in the final confirm
+    for non-Complete pools) every selected player id.
+
+  ELEMENT IDS / CLASSES static/confirm.js DEPENDS ON
+    #draftname (with data-existing), #startBtn, #nameWarn, #poolSearch, #poolList, #poolForm, #poolSubmit,
+    #randomAll, .cf-group (data-need, data-code), .cf-pill (data-code), .cf-count, .cf-gsearch,
+    buttons with data-act = random / all / none
+  ===========================================================================================
+#}
+{# pool_label: the pool's friendly name for the chip ("Complete", "Random", "Custom"). #}
 {% set pool_label = {'full': 'Complete', 'random': 'Random', 'custom': 'Custom'}.get(pool, pool) %}
 
 <div class="cf-wrap theme-{{ cfg.sport|lower }}">
+  {# the theme class, as on the setup page (see themes.css) #}
 
   <a class="cf-back" href="{{ cfg.home }}">&larr; Back to {{ cfg.sport }}</a>
 
+  {# The title and subtitle depend on the face of the page. #}
   {% if mode == 'select_players' %}
     <h1 class="cf-title">Build your player pool</h1>
     <p class="cf-sub">Choose exactly the number shown for each group. <b>Random</b> fills a group for you.</p>
@@ -14,6 +53,8 @@
     <p class="cf-sub">Check the setup below, give the draft a name, and start.</p>
   {% endif %}
 
+  {# THE CHIPS: a quick summary of the choices. The cap chip shows dollars with commas, or "None" when cap is
+     empty. The Berserker chip appears only when that mode is on. #}
   <div class="cf-chips">
     <span class="cf-chip"><b>{{ num_teams }}</b> teams</span>
     <span class="cf-chip">Pool: <b>{{ pool_label }}</b></span>
@@ -24,6 +65,8 @@
   {# ================= FINAL CONFIRM: name first, details below ================= #}
   {% if mode == 'final_confirm' %}
 
+    {# THE "NAME YOUR DRAFT" FORM. Posts to cfg.draft (routes.py: bb_draft etc.), which creates the draft's three
+       save files and opens the board. The hidden fields below carry every earlier choice along. #}
     <form id="startForm" class="cf-card cf-namecard" action="{{ cfg.draft }}" method="POST">
       <input type="hidden" name="num_teams" value="{{ num_teams }}">
       <input type="hidden" name="pool" value="{{ pool }}">
@@ -31,20 +74,26 @@
       {% if berserker %}<input type="hidden" name="berserker" value="Yes">{% endif %}
       {% for team in human_teams %}<input type="hidden" name="human_teams" value="{{ team }}">{% endfor %}
       {% for team in ai_set %}<input type="hidden" name="ai_set" value="{{ team }}">{% endfor %}
+      {# For Random and Custom pools, the exact players are sent as a list of ids (the draft route rebuilds the
+         pool from them). A Complete pool doesn't need this. #}
       {% if pool != 'full' %}
         {% for p in players %}<input type="hidden" name="selected_player_ids" value="{{ p.get('id') or p.get('ID') }}">{% endfor %}
       {% endif %}
 
       <div>
         <label class="cf-label" for="draftname">Name your draft</label>
+        {# maxlength 40; confirm.js strips characters that can't be in a file name. data-existing is the list of
+           existing draft names as JSON (|tojson), used for the duplicate-name warning. #}
         <input id="draftname" name="draftname" class="cf-input" type="text" maxlength="40" autocomplete="off"
                autofocus required placeholder="e.g. Fall League 2026"
                data-existing='{{ saved_names|default([])|tojson }}'>
+        {# Hidden until confirm.js finds a duplicate name. #}
         <div id="nameWarn" class="cf-warn" hidden>A draft with this name already exists. Starting will reopen it instead of creating a new one.</div>
       </div>
 
       <div class="cf-actions">
         <a class="cf-btn cf-btn-ghost" href="{{ cfg.home }}">Cancel</a>
+        {# Disabled until a name is typed (confirm.js). #}
         <button id="startBtn" class="cf-btn cf-btn-primary" type="submit" disabled>Start draft</button>
       </div>
     </form>
@@ -52,6 +101,9 @@
   {% endif %}
 
   {# ================= TEAMS ================= #}
+  {# A collapsible panel (<details>): OPEN on the final confirm, closed on the custom picker so the picker is
+     right there. Human teams first (with a blue ring), then the AI teams (smaller). Each logo address follows
+     Logos/fictional/<logo_dir>/<Team>_<logo_code>.png (see the README: "How would I change the names, logos"). #}
   <details class="cf-card cf-details" {% if mode != 'select_players' %}open{% endif %}>
     <summary>Teams ({{ human_teams|length + ai_set|length }})</summary>
     {% if human_teams %}
@@ -84,11 +136,15 @@
         <h2 class="cf-h2">Player pool</h2>
         <span class="cf-muted">{{ players|length }} players</span>
       </div>
+      {# One chip per position group with how many players of that group are in the pool. The filter
+         "selectattr(field, 'in', match)" keeps players whose position is one of the group's values. #}
       <div>
         {% for g in cfg.groups %}
           <span class="cf-chip">{{ g.title }} <b>{{ players|selectattr(cfg.pos_field, 'in', g.match)|list|length }}</b></span>
         {% endfor %}
       </div>
+      {# "Browse all players": a collapsible list with a search box (confirm.js filters it by each item's data-name).
+         pname is the display name: units have a "name"; people have FirstName + LastName. #}
       <details class="cf-details" style="margin-top:8px">
         <summary>Browse all players</summary>
         <input id="poolSearch" class="cf-input cf-input-sm" type="search" placeholder="Search players...">
@@ -104,6 +160,8 @@
   {# ================= CUSTOM POOL PICKER ================= #}
   {% elif mode == 'select_players' %}
 
+    {# THE PICKER FORM. It posts BACK to cfg.confirm with the ticked players (selected_player_ids); the confirm
+       route then shows the final confirm for those players. Earlier choices ride along as hidden fields. #}
     <form id="poolForm" action="{{ cfg.confirm }}" method="POST">
       <input type="hidden" name="num_teams" value="{{ num_teams }}">
       <input type="hidden" name="pool" value="{{ pool }}">
@@ -112,6 +170,9 @@
       {% for team in human_teams %}<input type="hidden" name="human_teams" value="{{ team }}">{% endfor %}
       {% for team in ai_set %}<input type="hidden" name="ai_set" value="{{ team }}">{% endfor %}
 
+      {# THE STICKY BAR at the top: one progress pill per group ("Catchers 0/8"), then "Random fill all" and
+         Continue (confirm.js enables Continue once every group has enough). The target for each group is
+         (number of teams) x (the group's mult). #}
       <div class="cf-card cf-sticky">
         <div class="cf-pills">
           {% for g in cfg.groups %}
@@ -124,6 +185,10 @@
         </div>
       </div>
 
+      {# THE GROUP BOXES, one per position group. data-need is the number required; data-code links the box to
+         its pill. Each box has a counter, three buttons (Random N / All / Clear, handled by confirm.js through
+         data-act), a filter box, and the list of every player in the group as a checkbox. The checkboxes are
+         all named selected_player_ids; the value is the player's id. #}
       <div class="cf-groups">
         {% for g in cfg.groups %}
           {% set need = num_teams * g.mult %}

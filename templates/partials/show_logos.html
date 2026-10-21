@@ -1,9 +1,37 @@
-{# Team picker grid. Rendered by /show_bb_logos, /show_bk_logos and /show_fb_logos with names=... and sport=... #}
+{#
+  ===========================================================================================
+  show_logos.html  --  the TEAM-PICKER GRID: all 32 fictional team logos as tick boxes ("which teams are yours?").
+
+  IT IS A SNIPPET, NOT A WHOLE PAGE. It has no <html> or <head>. The setup page loads it AFTER the page has
+  opened: setup_ui.html has  <div id="logos" hx-get="..." hx-trigger="load">, and htmx fetches this snippet and
+  drops it inside that div.
+
+  RENDERED BY:   routes.py: show_bb_logos(), show_bk_logos(), show_fb_logos()  (the "/show_bb_logos",
+                 "/show_bk_logos" and "/show_fb_logos" addresses).
+  STYLED BY:     setup.css (.su-teamgrid, .su-teamcb, .su-team)
+  USED BY:       static/setup.js reads the ticked boxes (named human_teams); the setup form posts them to the
+                 confirm route.
+
+  VARIABLES IT EXPECTS (from the route)
+    names   the list of team names to show (all 32, from services.py: get_team_names)
+    sport   "baseball", "basketball" or "football" (picks the logo folder and file ending)
+
+  LOGO ADDRESS:  Logos/fictional/<sport>/<TeamName>_<code>.png   (code: bb / bk / fb).
+  The team name is used exactly as written, so a team's picture must be named to match (see the README:
+  "How would I change the names, logos for the teams").
+  ===========================================================================================
+#}
+{# code: the file-name ending for this sport ("bb", "bk", "fb"; "bb" if the sport isn't recognised). #}
 {% set code = {'baseball': 'bb', 'basketball': 'bk', 'football': 'fb'}.get(sport, 'bb') %}
 <div class="su-teamgrid">
   {% for name in names %}
+    {# Each team is a hidden checkbox followed by a label that holds the logo and the name. Clicking the label
+       ticks the box (that's what the matching for= / id= pair does). The checkbox is named human_teams, so the
+       setup form submits every ticked team under that name. loop.index just makes each id unique. #}
     <input type="checkbox" class="su-teamcb" name="human_teams" id="team-{{ loop.index }}" value="{{ name }}">
     <label class="su-team" for="team-{{ loop.index }}" title="{{ name }}">
+      {# loading="lazy": the browser only downloads a logo when it's about to scroll into view.
+         onerror: if a team's picture is missing, fade the empty slot to 25% so it's obvious. #}
       <img src="https://filedn.com/limKzbrdG9qBWDCDLoyNoHF/files/Logos/fictional/{{ sport }}/{{ name }}_{{ code }}.png"
            alt="" loading="lazy" onerror="this.style.opacity='.25'">
       <span>{{ name }}</span>

@@ -1,5 +1,38 @@
-{# Shared UI for the three sport setup pages. Expects `cfg` (set by the sport's template) and saved_drafts. #}
+{#
+  ===========================================================================================
+  setup_ui.html  --  the SHARED SETUP FORM used by all three sports.
+
+  WHAT IT DRAWS
+    LEFT COLUMN (the new-draft form), three numbered steps and a bottom bar:
+      1  Teams ............. how many teams, and which ones are yours (the team-picker grid loads in by itself)
+      2  Player pool ....... Complete / Random / Custom
+      3  Salary cap & AI mode  the cap on / off (and the amount), and Berserker mode off / on
+      bar: the summary line and the Continue button
+    RIGHT COLUMN: the Saved drafts panel (search, Open and Delete for each).
+
+  INCLUDED BY:   baseball.html, basketball.html, football.html  (each inside {% block body %}, after setting cfg).
+                 It cannot be opened on its own.
+
+  VARIABLES IT EXPECTS
+    cfg           dictionary set by the including page:
+                    sport (title + theme class), home (back link), load / delete (the saved-draft buttons),
+                    confirm (where the form posts), logos (where htmx loads the team grid from)
+    saved_drafts  list of saved draft player-file names ("FallLeague_bb.json"), from the route
+    cap_default   the suggested salary cap number (0 if unknown), pre-filled into the cap box
+    cap_options   list of (label, amount) for the Tight / Suggested / Loose buttons
+
+  WHAT THE FORM SENDS (it posts to cfg.confirm, e.g. routes.py: bb_confirm)
+    num_teams (radio) .. human_teams (checkboxes, loaded by htmx) .. pool (radio) .. cap (radio: "No" / "Yes")
+    cap_amount (number) .. berserker (radio: "No" / "Yes")
+
+  ELEMENT IDS static/setup.js DEPENDS ON
+    newDraft, teamCount, clearTeams, capWrap, cap_amount, summary, goBtn, draftFilter,
+    form.su-del (with data-name), the .su-presets buttons (with data-amount)
+  ===========================================================================================
+#}
 <div class="cf-wrap theme-{{ cfg.sport|lower }}">
+  {# "theme-baseball" / "theme-basketball" / "theme-football" (from cfg.sport lower-cased): the class that picks the
+     sport's colors and fonts; see themes.css. #}
 
   <a class="cf-back" href="{{ cfg.home }}">&larr; All sports</a>
   <h1 class="cf-title">{{ cfg.sport }} Draft</h1>
@@ -8,11 +41,15 @@
   <div class="su-grid">
 
     {# ================= NEW DRAFT ================= #}
+    {# The new-draft form. It posts to the sport's confirm route. #}
     <form id="newDraft" class="cf-card" action="{{ cfg.confirm }}" method="POST">
 
+      {# ---------- STEP 1: TEAMS ---------- #}
       <section class="su-step">
         <h2 class="su-h"><span class="su-num">1</span>Teams</h2>
 
+        {# How many teams: a row of radio buttons drawn as a button bar. Four is pre-selected
+           ("checked" when n == 4). Changing it makes setup.js drop claimed teams that no longer fit. #}
         <div class="su-label">How many teams are in the draft?</div>
         <div class="su-seg">
           {% for n in [2, 4, 8, 12, 16, 24, 32] %}
@@ -21,15 +58,24 @@
           {% endfor %}
         </div>
 
+        {# "Which teams are yours?" with the counter (setup.js updates "0 / 4") and a Clear button. #}
         <div class="su-label su-labelrow">
           <span>Which teams are yours? <span id="teamCount" class="su-count">0 / 4</span></span>
           <button type="button" id="clearTeams" class="su-link">Clear</button>
         </div>
+        {# THE TEAM GRID: empty at first. htmx fetches it from cfg.logos (routes.py: show_bb_logos etc.) as soon as
+           the page loads ("hx-trigger=load") and puts the HTML in here; the file is partials/show_logos.html.
+           The "Loading teams..." text shows until it arrives. #}
         <div id="logos" class="su-logos" hx-get="{{ cfg.logos }}" hx-trigger="load">
           <span class="cf-muted">Loading teams...</span>
         </div>
       </section>
 
+      {# ---------- STEP 2: PLAYER POOL ---------- #}
+      {# Three cards (radio buttons): the value, the title and the description of each. "Complete" is pre-selected.
+           full    every player in the data
+           random  a random slice sized to the number of teams (services.py: load_*)
+           custom  you pick who is in the pool (the confirm page then shows the picker) #}
       <section class="su-step">
         <h2 class="su-h"><span class="su-num">2</span>Player pool</h2>
         <div class="su-choices">
@@ -46,9 +92,14 @@
         </div>
       </section>
 
+      {# ---------- STEP 3: SALARY CAP AND AI MODE ---------- #}
       <section class="su-step">
         <h2 class="su-h"><span class="su-num">3</span>Salary cap &amp; AI mode</h2>
 
+        {# Two button bars side by side (they wrap onto two lines on a narrow screen):
+             Salary cap:     "No cap" (default) / "Use a cap"  -> the form field "cap" = "No" / "Yes"
+             Berserker mode: "Off" (default) / "On"            -> the form field "berserker" = "No" / "Yes"
+           The inline style only sets the side-by-side layout and the gap between the two. #}
         <div style="display:flex;flex-wrap:wrap;gap:0 40px">
           <div>
             <div class="su-label">Salary cap</div>
@@ -70,8 +121,12 @@
             </div>
           </div>
         </div>
+        {# A one-line explanation of Berserker mode (see berserker.py). #}
         <p class="cf-muted" style="margin:10px 0 0">Berserker: 7 out of 10 AI picks are completely random (still legal for roster slots and the cap). The other 3 pick the normal way.</p>
 
+        {# THE CAP AMOUNT BOX: hidden ("hidden" attribute) until "Use a cap" is chosen (setup.js shows it).
+           cap_amount is pre-filled with the suggested cap (cap_default). The preset buttons fill it with a
+           suggested amount: setup.js reads each button's data-amount. #}
         <div id="capWrap" hidden>
           <div class="su-money">
             <span>$</span>
@@ -89,6 +144,8 @@
         </div>
       </section>
 
+      {# THE BOTTOM BAR: the summary text (setup.js rewrites it) and the Continue button, which setup.js keeps
+         disabled until at least one team is claimed (and, if a cap is on, an amount is entered). #}
       <div class="su-bar">
         <span id="summary" class="su-summary su-dim">Pick at least one team to continue</span>
         <button id="goBtn" class="cf-btn cf-btn-primary" type="submit" disabled>Continue</button>
@@ -96,12 +153,14 @@
     </form>
 
     {# ================= SAVED DRAFTS ================= #}
+    {# The right-hand panel: every saved draft, with Open and Delete buttons. #}
     <aside class="cf-card">
       <div class="cf-row">
         <h2 class="cf-h2">Saved drafts</h2>
         <span class="cf-muted">{{ saved_drafts|length }}</span>
       </div>
 
+      {# A search box, only when there are more than six saved drafts (setup.js filters the list). #}
       {% if saved_drafts|length > 6 %}
         <input id="draftFilter" class="cf-input cf-input-sm" type="search" placeholder="Search drafts...">
       {% endif %}
@@ -109,13 +168,18 @@
       {% if saved_drafts %}
         <ul class="su-drafts">
           {% for filename in saved_drafts %}
+            {# dname: the file name without its last 8 characters ("_bb.json" / "_bk.json" / "_fb.json" are all
+               8 long), which leaves just the draft's name. #}
             {% set dname = filename[:-8] %}
             <li class="su-draft" data-name="{{ dname|lower }}">
               <span class="nm" title="{{ dname }}">{{ dname }}</span>
+              {# OPEN: posts the file name to cfg.load (routes.py: bb_load etc.), which shows the draft board. #}
               <form action="{{ cfg.load }}" method="POST">
                 <input type="hidden" name="saved_draft_file" value="{{ filename }}">
                 <button class="cf-btn cf-btn-primary su-sm" type="submit">Open</button>
               </form>
+              {# DELETE: posts to cfg.delete. setup.js asks "Delete ...? This cannot be undone." first, using
+                 the data-name below. #}
               <form class="su-del" action="{{ cfg.delete }}" method="POST" data-name="{{ dname }}">
                 <input type="hidden" name="delete_draft_file" value="{{ filename }}">
                 <button class="cf-btn cf-btn-ghost su-sm su-danger" type="submit">Delete</button>
