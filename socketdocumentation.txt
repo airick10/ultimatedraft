@@ -1,0 +1,57 @@
+Install Socket
+	pip install flask-socketio eventlet
+
+-------------------------
+Add to requirements.txt
+	flask-socketio==5.3.6
+	eventlet==0.35.2
+
+---------------------------
+Set this up in __init__.py
+from flask import Flask
+from flask_socketio import SocketIO
+
+socketio = SocketIO()
+
+def create_app():
+    app = Flask(__name__)
+
+    from .routes import main
+    app.register_blueprint(main)
+
+    socketio.init_app(app)
+
+    return app
+----------------------------
+Update wsgi.py
+from ultimatebaseballdraft import create_app, socketio
+
+app = create_app()
+
+if __name__ == "__main__":
+    socketio.run(app, debug=True, port=5050)
+"This is important — you run socketio.run() instead of app.run() so the WebSocket server starts correctly."
+
+----------------------------
+Add SocketIO JS client to base.html:
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+----------------------------
+In your .html page you want to run the socket.  Add this.  This is where any JavaScript you have on the page goes.  Open up the browser Console.  You should see something like "SocketIO connected: FmPrwvgFdpMveJUsAAAB".  If you see this, SocketIO is conencted and you have your session ID.
+{% block scripts %}
+<script>
+    // all your JS here
+    const socket = io();
+
+    socket.on('connect', () => {
+        console.log('SocketIO connected:', socket.id);
+});
+
+    socket.on('disconnect', () => {
+        console.log('SocketIO disconnected');
+});
+    // ... rest of your JS
+</script>
+{% endblock %}
+
+
